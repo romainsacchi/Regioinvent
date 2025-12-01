@@ -740,6 +740,8 @@ class Regioinvent:
                 regio_process["code"] = uuid.uuid4().hex
                 # change database
                 regio_process["database"] = self.regioinvent_database_name
+                # add a type to the process (to differentiate from biosphere flows)
+                regio_process["type"] = 'process'
                 # add comment
                 regio_process["comment"] = (
                     f"""This process is a regionalized adaptation of the following process of the ecoinvent database: {activity} | {product} | {region}. No amount values were modified in the regionalization process, only the origin of the flows."""

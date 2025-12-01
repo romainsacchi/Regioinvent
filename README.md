@@ -122,5 +122,5 @@ Contact [maxime.agez@polymtl.ca](mailto:maxime.agez@polymtl.ca)
 
 ## Citation
 Citing the code: https://doi.org/10.5281/zenodo.11836125 <br>
-Citing the article: _article currently in review_ <br>
+Citing the article: https://doi.org/10.21203/rs.3.rs-8159063/v1 <br>
 Citing BACI: Gaulier, G. and Zignago, S. (2010) BACI: International Trade Database at the Product-Level. The 1994-2007 Version. CEPII Working Paper, N°2010-23.
