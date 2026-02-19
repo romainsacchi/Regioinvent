@@ -24,6 +24,15 @@ import wurst.searching as ws
 from tqdm import tqdm
 from importlib.resources import files, as_file
 
+try:
+    # Wurst >=0.5 can expose top-level extract_brightway2_databases as None when
+    # optional Brightway IO imports fail, while the extractor itself is available.
+    from wurst.brightway.extract_database import (
+        extract_brightway2_databases as wurst_extract_brightway2_databases,
+    )
+except Exception:
+    wurst_extract_brightway2_databases = None
+
 
 class Regioinvent:
     def __init__(self, bw_project_name, ecoinvent_database_name, ecoinvent_version):
@@ -154,6 +163,21 @@ class Regioinvent:
         self.regioinvent_database_name = ""
         self.cutoff = 0
 
+    def _extract_brightway2_databases(self, database_name):
+        """
+        Return a wurst extraction of a Brightway database with compatibility fallback.
+        """
+
+        extractor = getattr(wurst, "extract_brightway2_databases", None)
+        if not callable(extractor):
+            extractor = wurst_extract_brightway2_databases
+        if not callable(extractor):
+            raise ImportError(
+                "wurst.extract_brightway2_databases is unavailable. "
+                "Check Brightway and wurst compatibility in the active environment."
+            )
+        return extractor(database_name, add_identifiers=True)
+
     def spatialize_my_ecoinvent(self):
         """
         Function creates a copy of the original ecoinvent database and modifies this copy to spatialize the elementary
@@ -185,8 +209,8 @@ class Regioinvent:
         if self.name_ei_with_regionalized_biosphere not in bw2.databases:
             # transform format of ecoinvent to wurst format for speed-up
             self.logger.info("Extracting ecoinvent to wurst...")
-            self.ei_wurst = wurst.extract_brightway2_databases(
-                self.ecoinvent_database_name, add_identifiers=True
+            self.ei_wurst = self._extract_brightway2_databases(
+                self.ecoinvent_database_name
             )
 
             # also get ecoinvent in a format for more efficient searching
@@ -435,8 +459,8 @@ class Regioinvent:
             )
 
         if not self.ei_wurst:
-            self.ei_wurst = wurst.extract_brightway2_databases(
-                self.name_ei_with_regionalized_biosphere, add_identifiers=True
+            self.ei_wurst = self._extract_brightway2_databases(
+                self.name_ei_with_regionalized_biosphere
             )
         if not self.ei_in_dict:
             self.ei_in_dict = {
