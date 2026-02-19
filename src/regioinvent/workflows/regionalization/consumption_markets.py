@@ -1,12 +1,8 @@
 import collections
-import copy
-import json
 import uuid
-from importlib.resources import as_file, files
+from time import perf_counter
 
-import brightway2 as bw2
 import pandas as pd
-import wurst.searching as ws
 from tqdm import tqdm
 
 def create_consumption_markets(regio):
@@ -18,6 +14,8 @@ def create_consumption_markets(regio):
     regio.logger.info(
         "Creating consumption markets for internationally-traded products..."
     )
+    t0 = perf_counter()
+    checkpoint_every = 100
 
     # change to dictionary to speed searching for info
     regio.regioinvent_in_dict = {
@@ -33,7 +31,8 @@ def create_consumption_markets(regio):
             (process["reference product"], process["location"])
         ].append({process["name"]: process})
 
-    for product in tqdm(regio.eco_to_hs_class, leave=True):
+    for idx, product in enumerate(tqdm(regio.eco_to_hs_class, leave=True), start=1):
+        product_t0 = perf_counter()
         # filter the product in regio.consumption_data
         cmd_consumption_data = regio.consumption_data[
             regio.consumption_data.cmdCode == regio.eco_to_hs_class[product]
@@ -67,15 +66,13 @@ def create_consumption_markets(regio):
             [i for i in cmd_consumption_data.index]
         )
         cmd_consumption_data = cmd_consumption_data.sort_index()
-
-        # loop through each selected consumers of the commodity
-        for consumer in cmd_consumption_data.index.levels[0]:
-            # change to relative values
-            cmd_consumption_data.loc[consumer, "quantity (t)"] = (
-                cmd_consumption_data.loc[consumer, "quantity (t)"]
-                / cmd_consumption_data.loc[consumer, "quantity (t)"].sum()
-            ).values
-            # we need to add the aggregate to potentially already existing RoW exchanges
+        consumers_index = cmd_consumption_data.index.get_level_values(0)
+        # Normalize import shares once for all consumers.
+        cmd_consumption_data["quantity (t)"] = cmd_consumption_data["quantity (t)"] / (
+            cmd_consumption_data.groupby(level=0)["quantity (t)"].transform("sum")
+        )
+        # Aggregate potential duplicate RoW rows once.
+        if "RoW" in consumers_index:
             cmd_consumption_data = pd.concat(
                 [
                     cmd_consumption_data.drop("RoW", level=0),
@@ -85,22 +82,36 @@ def create_consumption_markets(regio):
                     ),
                 ]
             )
-            cmd_consumption_data = cmd_consumption_data.fillna(0)
+        cmd_consumption_data = cmd_consumption_data.fillna(0)
 
-            try:
-                source = (
-                    regio.domestic_production.loc[
-                        regio.domestic_production.cmdCode
-                        == regio.eco_to_hs_class[product],
-                        "source",
-                    ]
-                    .iloc[0]
-                    .split(" - ")[0]
-                )
-            # if IndexError -> product is only consumed domestically and not exported according to exiobase
-            except IndexError:
-                source = "EXIOBASE"
+        try:
+            source = (
+                regio.domestic_production.loc[
+                    regio.domestic_production.cmdCode
+                    == regio.eco_to_hs_class[product],
+                    "source",
+                ]
+                .iloc[0]
+                .split(" - ")[0]
+            )
+        # if IndexError -> product is only consumed domestically and not exported according to exiobase
+        except IndexError:
+            source = "EXIOBASE"
 
+        # Build O(1) technology->code lookup by trading partner.
+        codes_by_partner = {}
+        for partner in regio.created_geographies[product]:
+            entries = regio.regioinvent_in_dict.get((product, partner), [])
+            if not entries:
+                continue
+            codes_by_partner[partner] = {
+                list(item.keys())[0]: list(item.values())[0]["code"] for item in entries
+            }
+        row_codes = codes_by_partner.get("RoW", {})
+        tech_distribution = regio.distribution_technologies[product]
+
+        # loop through each selected consumers of the commodity
+        for consumer in cmd_consumption_data.index.levels[0]:
             # create the process information
             new_import_data = {
                 "name": "consumption market for " + product,
@@ -128,28 +139,20 @@ def create_consumption_markets(regio):
             # identify regionalized processes that were created in regio.first_order_regionalization()
             available_trading_partners = regio.created_geographies[product]
             # loop through the selected consumers
-            for trading_partner in cmd_consumption_data.loc[consumer].index:
+            consumer_shares = cmd_consumption_data.loc[consumer, "quantity (t)"]
+            for trading_partner, partner_share in consumer_shares.items():
                 # check if a regionalized process exist for that consumer
                 if trading_partner in available_trading_partners:
+                    partner_codes = codes_by_partner.get(trading_partner, row_codes)
                     # loop through available technologies to produce the commodity
-                    for technology in regio.distribution_technologies[product]:
-                        # get the uuid
-                        code = [
-                            i
-                            for i in regio.regioinvent_in_dict[
-                                (product, trading_partner)
-                            ]
-                            if list(i.keys())[0] == technology
-                        ][0][technology]["code"]
+                    for technology in tech_distribution:
+                        code = partner_codes[technology]
                         # get the share
-                        share = regio.distribution_technologies[product][technology]
+                        share = tech_distribution[technology]
                         # create the exchange
                         new_import_data["exchanges"].append(
                             {
-                                "amount": cmd_consumption_data.loc[
-                                    (consumer, trading_partner), "quantity (t)"
-                                ]
-                                * share,
+                                "amount": partner_share * share,
                                 "type": "technosphere",
                                 "input": (regio.regioinvent_database_name, code),
                                 "name": product,
@@ -157,23 +160,16 @@ def create_consumption_markets(regio):
                         )
                 # if a regionalized process does not exist for consumer, take the RoW aggregate
                 else:
+                    partner_codes = row_codes
                     # loop through available technologies to produce the commodity
-                    for technology in regio.distribution_technologies[product]:
-                        # get the uuid
-                        code = [
-                            i
-                            for i in regio.regioinvent_in_dict[(product, "RoW")]
-                            if list(i.keys())[0] == technology
-                        ][0][technology]["code"]
+                    for technology in tech_distribution:
+                        code = partner_codes[technology]
                         # get the share
-                        share = regio.distribution_technologies[product][technology]
+                        share = tech_distribution[technology]
                         # create the exchange
                         new_import_data["exchanges"].append(
                             {
-                                "amount": cmd_consumption_data.loc[
-                                    (consumer, trading_partner), "quantity (t)"
-                                ]
-                                * share,
+                                "amount": partner_share * share,
                                 "type": "technosphere",
                                 "input": (regio.regioinvent_database_name, code),
                                 "name": product,
@@ -225,3 +221,22 @@ def create_consumption_markets(regio):
                 ]
             # add to database in wurst
             regio.regioinvent_in_wurst.append(new_import_data)
+
+        if idx % checkpoint_every == 0:
+            elapsed = perf_counter() - t0
+            regio.logger.info(
+                f"Timing - create_consumption_markets: {idx}/{len(regio.eco_to_hs_class)} products, "
+                f"elapsed={elapsed:.2f}s, avg={elapsed/idx:.2f}s/product"
+            )
+
+        product_elapsed = perf_counter() - product_t0
+        if product_elapsed > 5:
+            regio.logger.info(
+                f"Timing - create_consumption_markets slow product {product}: {product_elapsed:.2f}s"
+            )
+
+    total = perf_counter() - t0
+    regio.logger.info(
+        f"Timing - create_consumption_markets total: {total:.2f}s "
+        f"({total/len(regio.eco_to_hs_class):.2f}s/product)"
+    )
