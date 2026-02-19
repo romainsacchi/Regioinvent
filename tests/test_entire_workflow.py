@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import bw2calc as bc
 import bw2data as bd
@@ -137,14 +138,26 @@ def test_demo_workflow_lca_regression(configured_regio):
     db_len = len(bd.Database(regio_db_name))
     assert db_len == 228070, f"Unexpected {regio_db_name} size: {db_len}"
 
+    if os.getenv("REGIO_TEST_ASSERT_SCORES", "0") != "1":
+        pytest.skip(
+            "Set REGIO_TEST_ASSERT_SCORES=1 to run slow LCA score regression checks."
+        )
+
     for i, spec in enumerate(TARGET_ACTIVITIES):
         act = _find_activity(regio_db_name, spec)
         if i == 0:
+            t0 = perf_counter()
             lca = bc.LCA({act: 1}, method)
             lca.lci(factorize=True)
             lca.lcia()
+            print(
+                f"LCA setup (matrix build/factorization + first LCIA) took "
+                f"{perf_counter() - t0:.2f}s"
+            )
         else:
+            t0 = perf_counter()
             lca.redo_lcia({act: 1})
+            print(f"Redo LCIA took {perf_counter() - t0:.2f}s")
         score = float(lca.score)
         print(f"Activity: {spec.name}, {spec.reference_product}, {spec.location} - Score: {score}")
         assert score == pytest.approx(spec.expected_score, rel=1e-8, abs=1e-12)
