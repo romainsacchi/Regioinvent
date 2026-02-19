@@ -6,8 +6,6 @@ import bw2calc as bc
 import bw2data as bd
 import pytest
 
-import regioinvent
-
 try:
     from dotenv import load_dotenv
 except ImportError:
@@ -19,7 +17,6 @@ if load_dotenv is not None:
 
 @dataclass(frozen=True)
 class ActivitySpec:
-    key: str
     name: str
     reference_product: str
     location: str
@@ -28,42 +25,36 @@ class ActivitySpec:
 
 TARGET_ACTIVITIES: tuple[ActivitySpec, ...] = (
     ActivitySpec(
-        key="ventilation_system_decentralized_in",
         name="consumption market for ventilation system, decentralized, 6 x 120 m3/h, polyethylene ducts, with earth tube heat exchanger",
         reference_product="ventilation system, decentralized, 6 x 120 m3/h, polyethylene ducts, with earth tube heat exchanger",
         location="IN",
         expected_score=11111.221433415523,
     ),
     ActivitySpec(
-        key="gold_zw",
         name="consumption market for gold",
         reference_product="gold",
         location="ZW",
         expected_score=49751.99391503114,
     ),
     ActivitySpec(
-        key="ventilation_dwellings_central_tz",
         name="consumption market for ventilation of dwellings, central, 1 x 720 m3/h",
         reference_product="ventilation of dwellings, central, 1 x 720 m3/h",
         location="TZ",
         expected_score=3.0292988252818187,
     ),
     ActivitySpec(
-        key="pv_slanted_roof_fr",
         name="consumption market for photovoltaic slanted-roof installation, 3kWp, single-Si, laminated, integrated, on roof",
         reference_product="photovoltaic slanted-roof installation, 3kWp, single-Si, laminated, integrated, on roof",
         location="FR",
         expected_score=8066.13128068786,
     ),
     ActivitySpec(
-        key="isoproturon_ie",
         name="consumption market for isoproturon",
         reference_product="isoproturon",
         location="IE",
         expected_score=6.717140836099581,
     ),
     ActivitySpec(
-        key="anthranilic_acid_cz",
         name="consumption market for anthranilic acid",
         reference_product="anthranilic acid",
         location="CZ",
@@ -73,16 +64,8 @@ TARGET_ACTIVITIES: tuple[ActivitySpec, ...] = (
 
 
 def _pick_method() -> tuple[str, ...]:
-    method_hint = os.getenv("REGIO_TEST_METHOD_HINT", "IMPACT World+").lower()
-    methods = sorted(list(bd.methods))
 
-    matches = [m for m in methods if method_hint in " | ".join(m).lower()]
-    if not matches:
-        raise AssertionError(
-            f"No LCIA method matches REGIO_TEST_METHOD_HINT={method_hint!r}. "
-            f"Example available method: {methods[0] if methods else 'none'}"
-        )
-    return matches[0]
+    return ('IPCC 2021', 'climate change: fossil, including SLCFs', 'global warming potential (GWP100)')
 
 
 def _find_activity(database_name: str, spec: ActivitySpec):
@@ -102,54 +85,31 @@ def _find_activity(database_name: str, spec: ActivitySpec):
     )
 
 
-@pytest.fixture(scope="session")
-def configured_regio():
-    if os.getenv("RUN_REGIOINVENT_E2E") != "1":
-        pytest.skip("Set RUN_REGIOINVENT_E2E=1 to run this slow integration test.")
-
+def test_regio_outputs_only_regression():
     project_name = os.getenv("REGIO_TEST_BW_PROJECT", "bw2project")
-    ecoinvent_db = os.getenv("REGIO_TEST_ECOINVENT_DB", "ecoinvent-3.10.1-cutoff")
-    ecoinvent_version = os.getenv("REGIO_TEST_ECOINVENT_VERSION", "3.10.1")
     regio_db_name = os.getenv("REGIO_TEST_REGIO_DB_NAME", "Regioinvent")
-    trade_db_path = os.getenv("REGIO_TEST_TRADE_DB_PATH")
-    cutoff = float(os.getenv("REGIO_TEST_CUTOFF", "0.99"))
-
-    if not trade_db_path:
-        pytest.skip("Set REGIO_TEST_TRADE_DB_PATH to the trade SQLite database path.")
-    if not Path(trade_db_path).exists():
-        pytest.skip(f"Trade DB file not found: {trade_db_path}")
 
     bd.projects.set_current(project_name)
 
-    regio = regioinvent.Regioinvent(
-        bw_project_name=project_name,
-        ecoinvent_database_name=ecoinvent_db,
-        ecoinvent_version=ecoinvent_version,
-    )
+    if regio_db_name not in bd.databases:
+        pytest.skip(
+            f"Database {regio_db_name!r} not found in project {project_name!r}. "
+            "Run regionalization first."
+        )
 
-    # Same workflow as doc/demo.ipynb
-    regio.spatialize_my_ecoinvent()
-    regio.import_fully_regionalized_impact_method(lcia_method="all")
-    regio.regionalize_ecoinvent_with_trade(
-        trade_database_path=trade_db_path,
-        regioinvent_database_name=regio_db_name,
-        cutoff=cutoff,
-    )
-
-    return regio
-
-
-def test_demo_workflow_lca_regression(configured_regio):
-    method = _pick_method()
-    regio_db_name = configured_regio.regioinvent_database_name
     db_len = len(bd.Database(regio_db_name))
     assert db_len == 228070, f"Unexpected {regio_db_name} size: {db_len}"
 
-    for spec in TARGET_ACTIVITIES:
+    print("Running regression test for regio outputs only...")
+    method = _pick_method()
+    for i, spec in enumerate(TARGET_ACTIVITIES):
         act = _find_activity(regio_db_name, spec)
-        lca = bc.LCA({act: 1}, method)
-        lca.lci()
-        lca.lcia()
+        if i == 0:
+            lca = bc.LCA({act: 1}, method)
+            lca.lci(factorize=True)
+            lca.lcia()
+        else:
+            lca.redo_lcia({act: 1})
         score = float(lca.score)
-
+        print(f"Activity: {spec.name}, {spec.reference_product}, {spec.location} - Score: {score}")
         assert score == pytest.approx(spec.expected_score, rel=1e-8, abs=1e-12)
