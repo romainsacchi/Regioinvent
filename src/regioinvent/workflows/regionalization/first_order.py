@@ -10,6 +10,14 @@ import pandas as pd
 import wurst.searching as ws
 from tqdm import tqdm
 
+
+def _clone_process_template(process):
+    """Fast clone for ecoinvent process templates used in regionalization loops."""
+    cloned = process.copy()
+    cloned["exchanges"] = [exc.copy() for exc in process.get("exchanges", [])]
+    return cloned
+
+
 def first_order_regionalization(regio):
     """
     Function to regionalized the key inputs of each process: electricity, municipal solid waste and heat.
@@ -50,6 +58,10 @@ def first_order_regionalization(regio):
     # Cache repeated transport code -> reference product lookups.
     transport_ref_product_cache = {}
     ei_regio_db = bw2.Database(regio.name_ei_with_regionalized_biosphere)
+    # Cache template input-presence flags to avoid repeated exchange scans.
+    template_input_flags_cache = {}
+    # Speed up irrelevant-process checks.
+    no_inputs_processes_set = {tuple(item) for item in regio.no_inputs_processes}
 
     # -----------------------------------------------------------------------------------------------------------
     # first, we regionalize internationally-traded products, these require the creation of markets and are selected
@@ -96,6 +108,7 @@ def first_order_regionalization(regio):
         possibilities = {tech: [] for tech in available_technologies}
         for i, geo in enumerate(available_geographies):
             possibilities[available_technologies[i]].append(geo)
+        possibilities_set = {tech: set(geos) for tech, geos in possibilities.items()}
 
         # determine the market share of each technology that produces the product, also determine the transportation
         regio.transportation_modes[product] = {}
@@ -207,7 +220,7 @@ def first_order_regionalization(regio):
             process = exact_process_lookup[
                 (product, activity, region, regio.name_ei_with_regionalized_biosphere)
             ]
-            regio_process = copy.deepcopy(process)
+            regio_process = _clone_process_template(process)
             # change location
             regio_process["location"] = prod_country
             # change code
@@ -254,37 +267,73 @@ def first_order_regionalization(regio):
             )
             return regio_process
 
+        def get_template_input_flags(product, activity, region):
+            cache_key = ("intl", product, activity, region)
+            if cache_key in template_input_flags_cache:
+                return template_input_flags_cache[cache_key]
+            process = exact_process_lookup[
+                (product, activity, region, regio.name_ei_with_regionalized_biosphere)
+            ]
+            names = [exc.get("name", "") for exc in process["exchanges"]]
+            products = [exc.get("product", "") for exc in process["exchanges"]]
+            flags = {
+                "alu_elec": any(
+                    ("electricity" in n and "aluminium" in n) for n in names
+                ),
+                "cobalt_elec": any(
+                    ("electricity" in n and "cobalt" in n) for n in names
+                ),
+                "voltage_elec": any(
+                    ("electricity" in n and "voltage" in n) for n in names
+                ),
+                "waste": "municipal solid waste" in products,
+                "heat_ng": "heat, district or industrial, natural gas" in products,
+                "heat_non_ng": (
+                    "heat, district or industrial, other than natural gas" in products
+                ),
+                "heat_small_non_ng": (
+                    "heat, central or small-scale, other than natural gas" in products
+                ),
+            }
+            template_input_flags_cache[cache_key] = flags
+            return flags
+
         # loop through technologies and producers
         for technology in possibilities.keys():
             for producer in producers.index:
                 # reset regio_process variable
                 regio_process = None
+                template_region = None
                 # if the producing country is available in the geographies of the ecoinvent production technologies
-                if producer in possibilities[technology] and producer not in [
+                if producer in possibilities_set[technology] and producer not in [
                     "RoW"
                 ]:
                     regio_process = copy_process(
                         product, technology, producer, producer
                     )
+                    template_region = producer
                 # if a region associated with producing country is available in the geographies of the ecoinvent production technologies
                 elif producer in regio.country_to_ecoinvent_regions:
                     for potential_region in regio.country_to_ecoinvent_regions[
                         producer
                     ]:
-                        if potential_region in possibilities[technology]:
+                        if potential_region in possibilities_set[technology]:
                             regio_process = copy_process(
                                 product, technology, potential_region, producer
                             )
+                            template_region = potential_region
                 # otherwise, take either RoW, GLO or a random available geography
                 if not regio_process:
-                    if "RoW" in possibilities[technology]:
+                    if "RoW" in possibilities_set[technology]:
                         regio_process = copy_process(
                             product, technology, "RoW", producer
                         )
-                    elif "GLO" in possibilities[technology]:
+                        template_region = "RoW"
+                    elif "GLO" in possibilities_set[technology]:
                         regio_process = copy_process(
                             product, technology, "GLO", producer
                         )
+                        template_region = "GLO"
                     else:
                         if possibilities[technology]:
                             # if no RoW/GLO processes available, take the first available geography by default...
@@ -294,6 +343,7 @@ def first_order_regionalization(regio):
                                 possibilities[technology][0],
                                 producer,
                             )
+                            template_region = possibilities[technology][0]
                             regio.assigned_random_geography.append(
                                 [product, technology, producer]
                             )
@@ -302,55 +352,42 @@ def first_order_regionalization(regio):
                 # testing the presence allows to save time if the input in question is just not used by the process
                 if regio_process:
                     # aluminium specific electricity input
-                    if regio.test_input_presence(
-                        regio_process, "electricity", extra="aluminium/electricity"
-                    ):
+                    flags = get_template_input_flags(
+                        product, technology, template_region
+                    )
+                    if flags["alu_elec"]:
                         regio_process = regio.change_aluminium_electricity(
                             regio_process, producer
                         )
                     # cobalt specific electricity input
-                    elif regio.test_input_presence(
-                        regio_process, "electricity", extra="cobalt/electricity"
-                    ):
+                    elif flags["cobalt_elec"]:
                         regio_process = regio.change_cobalt_electricity(
                             regio_process
                         )
                     # normal electricity input
-                    elif regio.test_input_presence(
-                        regio_process, "electricity", extra="voltage"
-                    ):
+                    elif flags["voltage_elec"]:
                         regio_process = regio.change_electricity(
                             regio_process, producer
                         )
                     # municipal solid waste input
-                    if regio.test_input_presence(
-                        regio_process, "municipal solid waste"
-                    ):
+                    if flags["waste"]:
                         regio_process = regio.change_waste(regio_process, producer)
                     # heat, district or industrial, natural gas input
-                    if regio.test_input_presence(
-                        regio_process, "heat, district or industrial, natural gas"
-                    ):
+                    if flags["heat_ng"]:
                         regio_process = regio.change_heat(
                             regio_process,
                             producer,
                             "heat, district or industrial, natural gas",
                         )
                     # heat, district or industrial, other than natural gas input
-                    if regio.test_input_presence(
-                        regio_process,
-                        "heat, district or industrial, other than natural gas",
-                    ):
+                    if flags["heat_non_ng"]:
                         regio_process = regio.change_heat(
                             regio_process,
                             producer,
                             "heat, district or industrial, other than natural gas",
                         )
                     # heat, central or small-scale, other than natural gas input
-                    if regio.test_input_presence(
-                        regio_process,
-                        "heat, central or small-scale, other than natural gas",
-                    ):
+                    if flags["heat_small_non_ng"]:
                         regio_process = regio.change_heat(
                             regio_process,
                             producer,
@@ -413,6 +450,7 @@ def first_order_regionalization(regio):
         possibilities = {tech: [] for tech in available_technologies}
         for i, geo in enumerate(available_geographies):
             possibilities[available_technologies[i]].append(geo)
+        possibilities_set = {tech: set(geos) for tech, geos in possibilities.items()}
 
         def copy_process(product, activity, region, prod_country):
             """
@@ -427,7 +465,7 @@ def first_order_regionalization(regio):
             process = exact_process_lookup[
                 (product, activity, region, regio.name_ei_with_regionalized_biosphere)
             ]
-            regio_process = copy.deepcopy(process)
+            regio_process = _clone_process_template(process)
             # change location
             regio_process["location"] = prod_country
             # change code
@@ -470,7 +508,7 @@ def first_order_regionalization(regio):
                 raise ws.NoResults
             market_process = market_candidates[0]
 
-            regio_process = copy.deepcopy(market_process)
+            regio_process = _clone_process_template(market_process)
             # change location
             regio_process["location"] = prod_country
             # change code
@@ -501,36 +539,72 @@ def first_order_regionalization(regio):
             ] = (regio_process["database"], regio_process["code"])
             return regio_process
 
+        def get_template_input_flags_non_traded(product, activity, region):
+            cache_key = ("nontraded", product, activity, region)
+            if cache_key in template_input_flags_cache:
+                return template_input_flags_cache[cache_key]
+            process = exact_process_lookup[
+                (product, activity, region, regio.name_ei_with_regionalized_biosphere)
+            ]
+            names = [exc.get("name", "") for exc in process["exchanges"]]
+            products = [exc.get("product", "") for exc in process["exchanges"]]
+            flags = {
+                "alu_elec": any(
+                    ("electricity" in n and "aluminium" in n) for n in names
+                ),
+                "cobalt_elec": any(
+                    ("electricity" in n and "cobalt" in n) for n in names
+                ),
+                "voltage_elec": any(
+                    ("electricity" in n and "voltage" in n) for n in names
+                ),
+                "waste": "municipal solid waste" in products,
+                "heat_ng": "heat, district or industrial, natural gas" in products,
+                "heat_non_ng": (
+                    "heat, district or industrial, other than natural gas" in products
+                ),
+                "heat_small_non_ng": (
+                    "heat, central or small-scale, other than natural gas" in products
+                ),
+            }
+            template_input_flags_cache[cache_key] = flags
+            return flags
+
         # loop through technologies
         for technology in possibilities.keys():
             # do not regionalize irrelevant processes
-            if [product, technology] not in regio.no_inputs_processes:
+            if (product, technology) not in no_inputs_processes_set:
                 # loop through geos
                 for geo in geographies_needed:
                     # reset regio_process variable
                     regio_process = None
+                    template_region = None
                     # if the producing country is available in the geographies of the ecoinvent production technologies
-                    if geo in possibilities[technology] and geo not in ["RoW"]:
+                    if geo in possibilities_set[technology] and geo not in ["RoW"]:
                         regio_process = copy_process(product, technology, geo, geo)
+                        template_region = geo
                     # if a region associated with producing country is available in the geographies of the ecoinvent production technologies
                     elif geo in regio.country_to_ecoinvent_regions:
                         for potential_region in regio.country_to_ecoinvent_regions[
                             geo
                         ]:
-                            if potential_region in possibilities[technology]:
+                            if potential_region in possibilities_set[technology]:
                                 regio_process = copy_process(
                                     product, technology, potential_region, geo
                                 )
+                                template_region = potential_region
                     # otherwise, take either RoW, GLO or a random available geography
                     if not regio_process:
-                        if "RoW" in possibilities[technology]:
+                        if "RoW" in possibilities_set[technology]:
                             regio_process = copy_process(
                                 product, technology, "RoW", geo
                             )
-                        elif "GLO" in possibilities[technology]:
+                            template_region = "RoW"
+                        elif "GLO" in possibilities_set[technology]:
                             regio_process = copy_process(
                                 product, technology, "GLO", geo
                             )
+                            template_region = "GLO"
                         else:
                             if possibilities[technology]:
                                 # if no RoW/GLO processes available, take the first available geography by default...
@@ -540,6 +614,7 @@ def first_order_regionalization(regio):
                                     possibilities[technology][0],
                                     geo,
                                 )
+                                template_region = possibilities[technology][0]
                                 regio.assigned_random_geography.append(
                                     [product, technology, geo]
                                 )
@@ -548,58 +623,42 @@ def first_order_regionalization(regio):
                     # testing the presence allows to save time if the input in question is just not used by the process
                     if regio_process:
                         # aluminium specific electricity input
-                        if regio.test_input_presence(
-                            regio_process,
-                            "electricity",
-                            extra="aluminium/electricity",
-                        ):
+                        flags = get_template_input_flags_non_traded(
+                            product, technology, template_region
+                        )
+                        if flags["alu_elec"]:
                             regio_process = regio.change_aluminium_electricity(
                                 regio_process, geo
                             )
                         # cobalt specific electricity input
-                        elif regio.test_input_presence(
-                            regio_process, "electricity", extra="cobalt/electricity"
-                        ):
+                        elif flags["cobalt_elec"]:
                             regio_process = regio.change_cobalt_electricity(
                                 regio_process
                             )
                         # normal electricity input
-                        elif regio.test_input_presence(
-                            regio_process, "electricity", extra="voltage"
-                        ):
+                        elif flags["voltage_elec"]:
                             regio_process = regio.change_electricity(
                                 regio_process, geo
                             )
                         # municipal solid waste input
-                        if regio.test_input_presence(
-                            regio_process, "municipal solid waste"
-                        ):
+                        if flags["waste"]:
                             regio_process = regio.change_waste(regio_process, geo)
                         # heat, district or industrial, natural gas input
-                        if regio.test_input_presence(
-                            regio_process,
-                            "heat, district or industrial, natural gas",
-                        ):
+                        if flags["heat_ng"]:
                             regio_process = regio.change_heat(
                                 regio_process,
                                 geo,
                                 "heat, district or industrial, natural gas",
                             )
                         # heat, district or industrial, other than natural gas input
-                        if regio.test_input_presence(
-                            regio_process,
-                            "heat, district or industrial, other than natural gas",
-                        ):
+                        if flags["heat_non_ng"]:
                             regio_process = regio.change_heat(
                                 regio_process,
                                 geo,
                                 "heat, district or industrial, other than natural gas",
                             )
                         # heat, central or small-scale, other than natural gas input
-                        if regio.test_input_presence(
-                            regio_process,
-                            "heat, central or small-scale, other than natural gas",
-                        ):
+                        if flags["heat_small_non_ng"]:
                             regio_process = regio.change_heat(
                                 regio_process,
                                 geo,
@@ -615,7 +674,7 @@ def first_order_regionalization(regio):
             if {
                 k: v
                 for k, v in possibilities.items()
-                if [product, k] not in regio.no_inputs_processes
+                if (product, k) not in no_inputs_processes_set
             }:
                 # reset regio_market variable
                 regio_market = None

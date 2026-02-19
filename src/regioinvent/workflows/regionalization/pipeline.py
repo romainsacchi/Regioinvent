@@ -27,6 +27,18 @@ def regionalize_ecoinvent_with_trade(
             f"Database '{regioinvent_database_name}' already exists; deleting it before regeneration."
         )
         del bw2data.databases[regioinvent_database_name]
+        # ecoinvent may have been re-linked to regioinvent in a previous run; rebuild once
+        # proactively to avoid a failed extraction followed by a second extraction/rebuild cycle.
+        if regio.name_ei_with_regionalized_biosphere in bw2data.databases:
+            regio.logger.info(
+                "Rebuilding spatialized ecoinvent copy after deleting existing regioinvent "
+                "to avoid dangling technosphere links."
+            )
+            del bw2data.databases[regio.name_ei_with_regionalized_biosphere]
+            regio.ei_wurst = []
+            regio.ei_in_dict = {}
+            regio.ei_regio_data = {}
+            regio.spatialize_my_ecoinvent()
 
     if cutoff > 0.99 or cutoff < 0:
         raise KeyError("cutoff must be between 0 and 0.99")
