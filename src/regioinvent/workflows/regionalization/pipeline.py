@@ -35,9 +35,27 @@ def regionalize_ecoinvent_with_trade(
         raise KeyError("You need to run the function spatialize_my_ecoinvent() first.")
 
     if not regio.ei_wurst:
-        regio.ei_wurst = regio._extract_brightway2_databases(
-            regio.name_ei_with_regionalized_biosphere
-        )
+        try:
+            regio.ei_wurst = regio._extract_brightway2_databases(
+                regio.name_ei_with_regionalized_biosphere
+            )
+        except Exception as exc:
+            # Existing "ecoinvent ... regionalized" may still contain links to a previously
+            # deleted regioinvent database. Rebuild it from pristine ecoinvent and retry.
+            if "ActivityDatasetDoesNotExist" in str(type(exc)) or regioinvent_database_name in str(exc):
+                regio.logger.warning(
+                    "Detected dangling technosphere links in the regionalized ecoinvent "
+                    "database after deleting the regioinvent database. Rebuilding "
+                    "the regionalized ecoinvent copy and retrying extraction."
+                )
+                if regio.name_ei_with_regionalized_biosphere in bw2data.databases:
+                    del bw2data.databases[regio.name_ei_with_regionalized_biosphere]
+                regio.spatialize_my_ecoinvent()
+                regio.ei_wurst = regio._extract_brightway2_databases(
+                    regio.name_ei_with_regionalized_biosphere
+                )
+            else:
+                raise
     if not regio.ei_in_dict:
         regio.ei_in_dict = {
             (i["reference product"], i["location"], i["name"]): i for i in regio.ei_wurst
