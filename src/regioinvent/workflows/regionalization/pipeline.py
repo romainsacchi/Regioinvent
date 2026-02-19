@@ -1,4 +1,5 @@
 import sqlite3
+from time import perf_counter
 
 import brightway2 as bw2
 
@@ -35,10 +36,24 @@ def regionalize_ecoinvent_with_trade(
             (i["reference product"], i["location"], i["name"]): i for i in regio.ei_wurst
         }
 
-    regio.format_trade_data()
-    regio.first_order_regionalization()
-    regio.create_consumption_markets()
-    regio.second_order_regionalization()
-    regio.spatialize_elem_flows()
-    regio.write_regioinvent_to_database()
-    regio.connect_ecoinvent_to_regioinvent()
+    t0 = perf_counter()
+    stages = [
+        ("format_trade_data", regio.format_trade_data),
+        ("first_order_regionalization", regio.first_order_regionalization),
+        ("create_consumption_markets", regio.create_consumption_markets),
+        ("second_order_regionalization", regio.second_order_regionalization),
+        ("spatialize_elem_flows", regio.spatialize_elem_flows),
+        ("write_regioinvent_to_database", regio.write_regioinvent_to_database),
+        ("connect_ecoinvent_to_regioinvent", regio.connect_ecoinvent_to_regioinvent),
+    ]
+
+    for stage_name, stage_fn in stages:
+        ts = perf_counter()
+        stage_fn()
+        regio.logger.info(
+            f"Stage timing - {stage_name}: {perf_counter() - ts:.2f}s"
+        )
+
+    regio.logger.info(
+        f"Stage timing - regionalize_ecoinvent_with_trade total: {perf_counter() - t0:.2f}s"
+    )
