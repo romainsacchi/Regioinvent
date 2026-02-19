@@ -2,6 +2,7 @@ import sqlite3
 from time import perf_counter
 
 import brightway2 as bw2
+import bw2data
 
 
 def regionalize_ecoinvent_with_trade(
@@ -20,6 +21,12 @@ def regionalize_ecoinvent_with_trade(
     regio.trade_conn = sqlite3.connect(trade_database_path)
     regio.regioinvent_database_name = regioinvent_database_name
     regio.cutoff = cutoff
+
+    if regioinvent_database_name in bw2data.databases:
+        regio.logger.info(
+            f"Database '{regioinvent_database_name}' already exists; deleting it before regeneration."
+        )
+        del bw2data.databases[regioinvent_database_name]
 
     if cutoff > 0.99 or cutoff < 0:
         raise KeyError("cutoff must be between 0 and 0.99")
