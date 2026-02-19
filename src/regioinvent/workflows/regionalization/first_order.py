@@ -2,6 +2,7 @@ import collections
 import copy
 import json
 import uuid
+from collections import defaultdict
 from importlib.resources import as_file, files
 
 import brightway2 as bw2
@@ -18,6 +19,37 @@ def first_order_regionalization(regio):
     regio.logger.info(
         "Regionalizing main inputs of internationally-traded products of ecoinvent..."
     )
+
+    # Build in-memory indices once to avoid repeated full scans over regio.ei_wurst.
+    non_market_by_product = defaultdict(list)
+    market_by_product = defaultdict(list)
+    exact_process_lookup = {}
+    market_candidates_lookup = defaultdict(list)
+    for ds in regio.ei_wurst:
+        product = ds.get("reference product")
+        if not product:
+            continue
+        name = ds.get("name", "")
+        location = ds.get("location")
+        database = ds.get("database")
+        is_market = ("market for" in name) or ("market group for" in name)
+        is_generic = "generic market" in name
+        is_import = "import from" in name
+        is_to_market = "to market" in name
+
+        if not is_market and not is_generic and not is_import:
+            non_market_by_product[product].append(ds)
+            exact_process_lookup[(product, name, location, database)] = ds
+
+        if is_market:
+            market_by_product[product].append(ds)
+
+        if is_market and not is_generic and not is_to_market:
+            market_candidates_lookup[(product, location, database)].append(ds)
+
+    # Cache repeated transport code -> reference product lookups.
+    transport_ref_product_cache = {}
+    ei_regio_db = bw2.Database(regio.name_ei_with_regionalized_biosphere)
 
     # -----------------------------------------------------------------------------------------------------------
     # first, we regionalize internationally-traded products, these require the creation of markets and are selected
@@ -53,14 +85,7 @@ def first_order_regionalization(regio):
         regio.created_geographies[product] = [i for i in producers.index]
 
         # identify the processes producing the product
-        filter_processes = ws.get_many(
-            regio.ei_wurst,
-            ws.equals("reference product", product),
-            ws.exclude(ws.contains("name", "market for")),
-            ws.exclude(ws.contains("name", "market group for")),
-            ws.exclude(ws.contains("name", "generic market")),
-            ws.exclude(ws.contains("name", "import from")),
-        )
+        filter_processes = non_market_by_product.get(product, [])
         # there can be multiple technologies to produce the same product, register all possibilities
         available_geographies = []
         available_technologies = []
@@ -77,14 +102,7 @@ def first_order_regionalization(regio):
         regio.distribution_technologies[product] = {
             tech: 0 for tech in available_technologies
         }
-        market_processes = ws.get_many(
-            regio.ei_wurst,
-            ws.equals("reference product", product),
-            ws.either(
-                ws.contains("name", "market for"),
-                ws.contains("name", "market group for"),
-            ),
-        )
+        market_processes = market_by_product.get(product, [])
         number_of_markets = 0
         for ds in market_processes:
             number_of_markets += 1
@@ -186,17 +204,9 @@ def first_order_regionalization(regio):
             :return: a copied and modified process of ecoinvent
             """
             # filter the process to-be-copied
-            process = ws.get_one(
-                regio.ei_wurst,
-                ws.equals("reference product", product),
-                ws.equals("name", activity),
-                ws.equals("location", region),
-                ws.equals("database", regio.name_ei_with_regionalized_biosphere),
-                ws.exclude(ws.contains("name", "market for")),
-                ws.exclude(ws.contains("name", "market group for")),
-                ws.exclude(ws.contains("name", "generic market")),
-                ws.exclude(ws.contains("name", "import from")),
-            )
+            process = exact_process_lookup[
+                (product, activity, region, regio.name_ei_with_regionalized_biosphere)
+            ]
             regio_process = copy.deepcopy(process)
             # change location
             regio_process["location"] = prod_country
@@ -352,6 +362,10 @@ def first_order_regionalization(regio):
 
         # add transportation to production market
         for transportation_mode in regio.transportation_modes[product]:
+            if transportation_mode not in transport_ref_product_cache:
+                transport_ref_product_cache[transportation_mode] = (
+                    ei_regio_db.get(transportation_mode).as_dict()["reference product"]
+                )
             global_market_activity["exchanges"].append(
                 {
                     "amount": regio.transportation_modes[product][
@@ -360,11 +374,7 @@ def first_order_regionalization(regio):
                     "type": "technosphere",
                     "database": regio.name_ei_with_regionalized_biosphere,
                     "code": transportation_mode,
-                    "product": bw2.Database(
-                        regio.name_ei_with_regionalized_biosphere
-                    )
-                    .get(transportation_mode)
-                    .as_dict()["reference product"],
+                    "product": transport_ref_product_cache[transportation_mode],
                     "input": (
                         regio.name_ei_with_regionalized_biosphere,
                         transportation_mode,
@@ -391,14 +401,7 @@ def first_order_regionalization(regio):
         "Regionalizing main inputs of non-internationally traded processes of ecoinvent..."
     )
     for product in tqdm(relevant_non_traded_products, leave=True):
-        filter_processes = ws.get_many(
-            regio.ei_wurst,
-            ws.equals("reference product", product),
-            ws.exclude(ws.contains("name", "market for")),
-            ws.exclude(ws.contains("name", "market group for")),
-            ws.exclude(ws.contains("name", "generic market")),
-            ws.exclude(ws.contains("name", "import from")),
-        )
+        filter_processes = non_market_by_product.get(product, [])
 
         # there can be multiple technologies to produce the same product, register all possibilities
         available_geographies = []
@@ -421,17 +424,9 @@ def first_order_regionalization(regio):
             :return: a copied and modified process of ecoinvent
             """
             # filter the process to-be-copied
-            process = ws.get_one(
-                regio.ei_wurst,
-                ws.equals("reference product", product),
-                ws.equals("name", activity),
-                ws.equals("location", region),
-                ws.equals("database", regio.name_ei_with_regionalized_biosphere),
-                ws.exclude(ws.contains("name", "market for")),
-                ws.exclude(ws.contains("name", "market group for")),
-                ws.exclude(ws.contains("name", "generic market")),
-                ws.exclude(ws.contains("name", "import from")),
-            )
+            process = exact_process_lookup[
+                (product, activity, region, regio.name_ei_with_regionalized_biosphere)
+            ]
             regio_process = copy.deepcopy(process)
             # change location
             regio_process["location"] = prod_country
@@ -468,18 +463,12 @@ def first_order_regionalization(regio):
             """
 
             # filter the process to-be-copied
-            market_process = ws.get_one(
-                regio.ei_wurst,
-                ws.equals("reference product", product),
-                ws.equals("location", region),
-                ws.equals("database", regio.name_ei_with_regionalized_biosphere),
-                ws.either(
-                    ws.contains("name", "market for"),
-                    ws.contains("name", "market group for"),
-                ),
-                ws.exclude(ws.contains("name", "generic market")),
-                ws.exclude(ws.contains("name", "to market")),
+            market_candidates = market_candidates_lookup.get(
+                (product, region, regio.name_ei_with_regionalized_biosphere), []
             )
+            if not market_candidates:
+                raise ws.NoResults
+            market_process = market_candidates[0]
 
             regio_process = copy.deepcopy(market_process)
             # change location

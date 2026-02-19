@@ -31,16 +31,28 @@ def create_consumption_markets(regio):
             (process["reference product"], process["location"])
         ].append({process["name"]: process})
 
+    # Precompute mean trade quantities once for all products to avoid repeated groupby work.
+    consumption_by_cmd = (
+        regio.consumption_data.groupby(["cmdCode", "importer", "exporter"])["quantity (t)"]
+        .mean()
+        .sort_index()
+    )
+    # Precompute source text once per cmdCode.
+    source_by_cmd = (
+        regio.domestic_production.groupby("cmdCode")["source"].first().to_dict()
+    )
+
     for idx, product in enumerate(tqdm(regio.eco_to_hs_class, leave=True), start=1):
         product_t0 = perf_counter()
+        cmd_code = regio.eco_to_hs_class[product]
         # filter the product in regio.consumption_data
-        cmd_consumption_data = regio.consumption_data[
-            regio.consumption_data.cmdCode == regio.eco_to_hs_class[product]
-        ].copy("deep")
-        # calculate the average consumption volume for each country
-        cmd_consumption_data = cmd_consumption_data.groupby(
-            ["importer", "exporter"]
-        ).agg({"quantity (t)": "mean"})
+        try:
+            cmd_consumption_data = consumption_by_cmd.xs(cmd_code, level=0).to_frame(
+                "quantity (t)"
+            )
+        except KeyError:
+            # No trade data for this product.
+            continue
         # change to relative values
         consumers = (
             cmd_consumption_data.groupby(level=0).sum()
@@ -84,18 +96,11 @@ def create_consumption_markets(regio):
             )
         cmd_consumption_data = cmd_consumption_data.fillna(0)
 
-        try:
-            source = (
-                regio.domestic_production.loc[
-                    regio.domestic_production.cmdCode
-                    == regio.eco_to_hs_class[product],
-                    "source",
-                ]
-                .iloc[0]
-                .split(" - ")[0]
-            )
-        # if IndexError -> product is only consumed domestically and not exported according to exiobase
-        except IndexError:
+        source_raw = source_by_cmd.get(cmd_code)
+        if source_raw:
+            source = source_raw.split(" - ")[0]
+        else:
+            # Product is only consumed domestically and not exported according to exiobase.
             source = "EXIOBASE"
 
         # Build O(1) technology->code lookup by trading partner.
@@ -140,6 +145,8 @@ def create_consumption_markets(regio):
             available_trading_partners = regio.created_geographies[product]
             # loop through the selected consumers
             consumer_shares = cmd_consumption_data.loc[consumer, "quantity (t)"]
+            exchange_amounts = collections.defaultdict(float)
+            exchange_templates = {}
             for trading_partner, partner_share in consumer_shares.items():
                 # check if a regionalized process exist for that consumer
                 if trading_partner in available_trading_partners:
@@ -149,15 +156,14 @@ def create_consumption_markets(regio):
                         code = partner_codes[technology]
                         # get the share
                         share = tech_distribution[technology]
-                        # create the exchange
-                        new_import_data["exchanges"].append(
-                            {
-                                "amount": partner_share * share,
+                        inp = (regio.regioinvent_database_name, code)
+                        exchange_amounts[inp] += partner_share * share
+                        if inp not in exchange_templates:
+                            exchange_templates[inp] = {
                                 "type": "technosphere",
-                                "input": (regio.regioinvent_database_name, code),
+                                "input": inp,
                                 "name": product,
                             }
-                        )
                 # if a regionalized process does not exist for consumer, take the RoW aggregate
                 else:
                     partner_codes = row_codes
@@ -166,59 +172,33 @@ def create_consumption_markets(regio):
                         code = partner_codes[technology]
                         # get the share
                         share = tech_distribution[technology]
-                        # create the exchange
-                        new_import_data["exchanges"].append(
-                            {
-                                "amount": partner_share * share,
+                        inp = (regio.regioinvent_database_name, code)
+                        exchange_amounts[inp] += partner_share * share
+                        if inp not in exchange_templates:
+                            exchange_templates[inp] = {
                                 "type": "technosphere",
-                                "input": (regio.regioinvent_database_name, code),
+                                "input": inp,
                                 "name": product,
                             }
-                        )
             # add transportation to consumption market
             for transportation_mode in regio.transportation_modes[product]:
-                new_import_data["exchanges"].append(
-                    {
-                        "amount": regio.transportation_modes[product][
-                            transportation_mode
-                        ],
-                        "type": "technosphere",
-                        "input": (
-                            regio.name_ei_with_regionalized_biosphere,
-                            transportation_mode,
-                        ),
-                    }
+                inp = (
+                    regio.name_ei_with_regionalized_biosphere,
+                    transportation_mode,
                 )
-
-            # check for duplicate input codes with different values (coming from RoW)
-            duplicates = [
-                item
-                for item, count in collections.Counter(
-                    [i["input"] for i in new_import_data["exchanges"]]
-                ).items()
-                if count > 1
-            ]
-            # add duplicates into one single flow
-            for duplicate in duplicates:
-                total = sum(
-                    [
-                        i["amount"]
-                        for i in new_import_data["exchanges"]
-                        if i["input"] == duplicate
-                    ]
-                )
-                new_import_data["exchanges"] = [
-                    i
-                    for i in new_import_data["exchanges"]
-                    if i["input"] != duplicate
-                ] + [
-                    {
-                        "amount": total,
-                        "name": product,
-                        "type": "technosphere",
-                        "input": duplicate,
-                    }
+                exchange_amounts[inp] += regio.transportation_modes[product][
+                    transportation_mode
                 ]
+                if inp not in exchange_templates:
+                    exchange_templates[inp] = {
+                        "type": "technosphere",
+                        "input": inp,
+                    }
+
+            for inp, amount in exchange_amounts.items():
+                exc = dict(exchange_templates[inp])
+                exc["amount"] = amount
+                new_import_data["exchanges"].append(exc)
             # add to database in wurst
             regio.regioinvent_in_wurst.append(new_import_data)
 
