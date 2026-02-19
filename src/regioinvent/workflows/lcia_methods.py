@@ -1,6 +1,28 @@
 from importlib.resources import as_file, files
 
 import brightway2 as bw2
+import numpy as np
+
+
+def _has_method_family(method_fragment):
+    fragment = method_fragment.lower()
+    return any(fragment in " | ".join(method).lower() for method in bw2.methods)
+
+
+def _import_method_package(regio, relpath, method_fragment, label):
+    if _has_method_family(method_fragment):
+        regio.logger.info(f"{label} already present in Brightway project; skipping import.")
+        return
+
+    with as_file(files("regioinvent").joinpath(relpath)) as file_path:
+        try:
+            bw2.BW2Package.import_file(file_path)
+        except EOFError:
+            regio.logger.warning(
+                f"Failed importing {label} due to EOFError while backing up existing methods. "
+                "This usually means methods already exist with corrupted backup state. "
+                "Skipping import."
+            )
 
 
 def import_fully_regionalized_impact_method(regio, lcia_method="all"):
@@ -18,119 +40,119 @@ def import_fully_regionalized_impact_method(regio, lcia_method="all"):
             "Available LCIA methods are: 'IW v2.1', 'EF v3.1', 'ReCiPe 2016 v1.03 (H)' or 'all'"
         )
 
+    # Compatibility for older Brightway code paths that still reference np.NaN.
+    if not hasattr(np, "NaN"):
+        np.NaN = np.nan
+
     # just load the correct BW2Package file from Data storage folder
     if lcia_method == "all" and regio.ecoinvent_version == "3.10":
         regio.logger.info("Importing all available fully regionalized lcia methods for ecoinvent3.10.")
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v310.0fffd5e3daa5f4cf11ef83e49c375827.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
-
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/EF/EF31_regionalized-for-ecoinvent-v310.87ec66ed7e5775d0132d1129fb5caf03.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
-
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v310.dd7e66b1994d898394e3acfbed8eef83.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v310.0fffd5e3daa5f4cf11ef83e49c375827.bw2package",
+            "IMPACT World+ v2.1",
+            "IMPACT World+ v2.1",
+        )
+        _import_method_package(
+            regio,
+            "data/EF/EF31_regionalized-for-ecoinvent-v310.87ec66ed7e5775d0132d1129fb5caf03.bw2package",
+            "EF v3.1",
+            "EF v3.1",
+        )
+        _import_method_package(
+            regio,
+            "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v310.dd7e66b1994d898394e3acfbed8eef83.bw2package",
+            "ReCiPe 2016 v1.03 (H)",
+            "ReCiPe 2016 v1.03 (H)",
+        )
 
     if lcia_method == "all" and regio.ecoinvent_version == "3.9":
         regio.logger.info("Importing all available fully regionalized lcia methods for ecoinvent3.9.")
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v39.af770e84bfd0f4365d509c026796639a.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
-
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/EF/EF31_regionalized-for-ecoinvent-v39.ff0965b0f9793fbd2a351c9155946122.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
-
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v39.d03db1f1699b4f0b4d72626e52a40647.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v39.af770e84bfd0f4365d509c026796639a.bw2package",
+            "IMPACT World+ v2.1",
+            "IMPACT World+ v2.1",
+        )
+        _import_method_package(
+            regio,
+            "data/EF/EF31_regionalized-for-ecoinvent-v39.ff0965b0f9793fbd2a351c9155946122.bw2package",
+            "EF v3.1",
+            "EF v3.1",
+        )
+        _import_method_package(
+            regio,
+            "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v39.d03db1f1699b4f0b4d72626e52a40647.bw2package",
+            "ReCiPe 2016 v1.03 (H)",
+            "ReCiPe 2016 v1.03 (H)",
+        )
 
     if lcia_method == "IW v2.1" and regio.ecoinvent_version == "3.10":
         regio.logger.info(
             "Importing the fully regionalized version of IMPACT World+ v2.1 for ecoinvent3.10."
         )
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v310.0fffd5e3daa5f4cf11ef83e49c375827.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v310.0fffd5e3daa5f4cf11ef83e49c375827.bw2package",
+            "IMPACT World+ v2.1",
+            "IMPACT World+ v2.1",
+        )
 
     elif lcia_method == "IW v2.1" and regio.ecoinvent_version == "3.9":
         regio.logger.info(
             "Importing the fully regionalized version of IMPACT World+ v2.1 for ecoinvent3.9."
         )
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v39.af770e84bfd0f4365d509c026796639a.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/IW/impact_world_plus_21_regionalized-for-ecoinvent-v39.af770e84bfd0f4365d509c026796639a.bw2package",
+            "IMPACT World+ v2.1",
+            "IMPACT World+ v2.1",
+        )
 
     elif lcia_method == "EF v3.1" and regio.ecoinvent_version == "3.10":
         regio.logger.info("Importing the fully regionalized version of EF v3.1 for ecoinvent 3.10.")
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/EF/EF31_regionalized-for-ecoinvent-v310.87ec66ed7e5775d0132d1129fb5caf03.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/EF/EF31_regionalized-for-ecoinvent-v310.87ec66ed7e5775d0132d1129fb5caf03.bw2package",
+            "EF v3.1",
+            "EF v3.1",
+        )
 
     elif lcia_method == "EF v3.1" and regio.ecoinvent_version == "3.9":
         regio.logger.info("Importing the fully regionalized version of EF v3.1 for ecoinvent 3.9.")
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/EF/EF31_regionalized-for-ecoinvent-v39.ff0965b0f9793fbd2a351c9155946122.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/EF/EF31_regionalized-for-ecoinvent-v39.ff0965b0f9793fbd2a351c9155946122.bw2package",
+            "EF v3.1",
+            "EF v3.1",
+        )
 
     elif lcia_method == "ReCiPe 2016 v1.03 (H)" and regio.ecoinvent_version == "3.10":
         regio.logger.info(
             "Importing the fully regionalized version of ReCiPe 2016 v1.03 (H) for ecoinvent 3.10."
         )
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v310.dd7e66b1994d898394e3acfbed8eef83.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v310.dd7e66b1994d898394e3acfbed8eef83.bw2package",
+            "ReCiPe 2016 v1.03 (H)",
+            "ReCiPe 2016 v1.03 (H)",
+        )
 
     elif lcia_method == "ReCiPe 2016 v1.03 (H)" and regio.ecoinvent_version == "3.9":
         regio.logger.info(
             "Importing the fully regionalized version of ReCiPe 2016 v1.03 (H) for ecoinvent 3.9."
         )
 
-        with as_file(
-            files("regioinvent").joinpath(
-                "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v39.d03db1f1699b4f0b4d72626e52a40647.bw2package"
-            )
-        ) as file_path:
-            bw2.BW2Package.import_file(file_path)
+        _import_method_package(
+            regio,
+            "data/ReCiPe/ReCiPe_regionalized-for-ecoinvent-v39.d03db1f1699b4f0b4d72626e52a40647.bw2package",
+            "ReCiPe 2016 v1.03 (H)",
+            "ReCiPe 2016 v1.03 (H)",
+        )
