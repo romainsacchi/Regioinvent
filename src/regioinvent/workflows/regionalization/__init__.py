@@ -10,6 +10,9 @@ from regioinvent.workflows.regionalization.io_ops import (
 )
 from regioinvent.workflows.regionalization.io_ops import format_trade_data
 from regioinvent.workflows.regionalization.io_ops import (
+    write_database,
+)
+from regioinvent.workflows.regionalization.io_ops import (
     write_regioinvent_to_database,
 )
 from regioinvent.workflows.regionalization.pipeline import (
@@ -34,6 +37,7 @@ __all__ = [
     "create_consumption_markets",
     "second_order_regionalization",
     "spatialize_elem_flows",
+    "write_database",
     "write_regioinvent_to_database",
     "connect_ecoinvent_to_regioinvent",
     "change_electricity",

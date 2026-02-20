@@ -26,6 +26,9 @@ from regioinvent.workflows.regionalization import (
     format_trade_data as workflow_format_trade_data,
 )
 from regioinvent.workflows.regionalization import (
+    write_database as workflow_write_database,
+)
+from regioinvent.workflows.regionalization import (
     write_regioinvent_to_database as workflow_write_regioinvent_to_database,
 )
 from regioinvent.workflows.regionalization import (
@@ -100,7 +103,7 @@ class Regioinvent:
             )
 
         # set up necessary variables
-        self.ecoinvent_database_name = ecoinvent_database_name
+        self.source_db_name = ecoinvent_database_name
         self.name_ei_with_regionalized_biosphere = (
             ecoinvent_database_name + " regionalized"
         )
@@ -192,8 +195,10 @@ class Regioinvent:
         self.consumption_data = pd.DataFrame()
         self.production_data = pd.DataFrame()
         self.trade_conn = ""
-        self.regioinvent_database_name = ""
+        self.target_db_name = f"{ecoinvent_database_name} - regionalized"
         self.cutoff = 0
+        self._spatialized_in_memory_ready = False
+        self._final_database_in_memory = None
 
     def _extract_brightway2_databases(self, database_name):
         """
@@ -204,14 +209,15 @@ class Regioinvent:
     def spatialize_my_ecoinvent(self):
         return workflow_spatialize_my_ecoinvent(self)
 
+    def spatialize_ecoinvent(self):
+        return self.spatialize_my_ecoinvent()
+
     def import_fully_regionalized_impact_method(self, lcia_method="all"):
         return workflow_import_fully_regionalized_impact_method(self, lcia_method)
 
-    def regionalize_ecoinvent_with_trade(
-        self, trade_database_path, regioinvent_database_name, cutoff
-    ):
+    def regionalize_ecoinvent_with_trade(self, trade_database_path, cutoff):
         return workflow_regionalize_ecoinvent_with_trade(
-            self, trade_database_path, regioinvent_database_name, cutoff
+            self, trade_database_path, cutoff
         )
 
     # TODO we use this function for showing the influence of spatialization for the article, after that, remove it
@@ -283,6 +289,9 @@ class Regioinvent:
 
     def write_regioinvent_to_database(self):
         return workflow_write_regioinvent_to_database(self)
+
+    def write_database(self, target_db_name=None):
+        return workflow_write_database(self, target_db_name=target_db_name)
 
     def connect_ecoinvent_to_regioinvent(self):
         return workflow_connect_ecoinvent_to_regioinvent(self)

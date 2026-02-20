@@ -42,7 +42,7 @@ def spatialize_my_ecoinvent(regio):
     # transform format of ecoinvent to wurst format for speed-up
     regio.logger.info("Extracting ecoinvent to wurst...")
     regio.ei_wurst = extract_brightway2_databases_compat(
-        regio.ecoinvent_database_name, add_identifiers=True
+        regio.source_db_name, add_identifiers=True
     )
 
     # also get ecoinvent in a format for more efficient searching

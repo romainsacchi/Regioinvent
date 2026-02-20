@@ -124,17 +124,16 @@ def configured_regio():
     regio.import_fully_regionalized_impact_method(lcia_method="all")
     regio.regionalize_ecoinvent_with_trade(
         trade_database_path=trade_db_path,
-        regioinvent_database_name=regio_db_name,
         cutoff=cutoff,
     )
-    regio.write_database()
+    regio.write_database(target_db_name=regio_db_name)
 
     return regio
 
 
 def test_demo_workflow_lca_regression(configured_regio):
     method = _pick_method()
-    regio_db_name = configured_regio.regioinvent_database_name
+    regio_db_name = configured_regio.target_db_name
     db_len = len(bd.Database(regio_db_name))
     assert db_len == 228070, f"Unexpected {regio_db_name} size: {db_len}"
 

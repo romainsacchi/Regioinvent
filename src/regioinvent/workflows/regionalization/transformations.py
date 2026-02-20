@@ -1,4 +1,3 @@
-import brightway2 as bw2
 import wurst.searching as ws
 
 
@@ -467,28 +466,16 @@ def change_heat(regio, process, export_country, heat_flow):
                 export_country == "CA"
                 and heat_flow != "heat, central or small-scale, other than natural gas"
             ):
-                if regio.name_ei_with_regionalized_biosphere in bw2.databases:
-                    global_heat_process = ws.get_one(
-                        regio.ei_wurst,
-                        ws.equals("reference product", heat_flow),
-                        ws.equals("location", "GLO"),
-                        ws.equals("database", regio.name_ei_with_regionalized_biosphere),
-                        ws.either(
-                            ws.contains("name", "market for"),
-                            ws.contains("name", "market group for"),
-                        ),
-                    )
-                else:
-                    global_heat_process = ws.get_one(
-                        regio.ei_wurst,
-                        ws.equals("reference product", heat_flow),
-                        ws.equals("location", "GLO"),
-                        ws.equals("database", regio.ecoinvent_database_name),
-                        ws.either(
-                            ws.contains("name", "market for"),
-                            ws.contains("name", "market group for"),
-                        ),
-                    )
+                global_heat_process = ws.get_one(
+                    regio.ei_wurst,
+                    ws.equals("reference product", heat_flow),
+                    ws.equals("location", "GLO"),
+                    ws.equals("database", regio.name_ei_with_regionalized_biosphere),
+                    ws.either(
+                        ws.contains("name", "market for"),
+                        ws.contains("name", "market group for"),
+                    ),
+                )
 
                 heat_exchanges = {
                     k: v

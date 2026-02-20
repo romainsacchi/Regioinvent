@@ -6,6 +6,7 @@ from regioinvent.workflows.regionalization import format_trade_data
 from regioinvent.workflows.regionalization import regionalize_ecoinvent_with_trade
 from regioinvent.workflows.regionalization import second_order_regionalization
 from regioinvent.workflows.regionalization import spatialize_elem_flows
+from regioinvent.workflows.regionalization import write_database
 from regioinvent.workflows.regionalization import write_regioinvent_to_database
 from regioinvent.workflows.spatialization import spatialize_my_ecoinvent
 from regioinvent.workflows.regionalization import change_aluminium_electricity
@@ -17,6 +18,7 @@ from regioinvent.workflows.regionalization import test_input_presence
 
 __all__ = [
     "format_trade_data",
+    "write_database",
     "write_regioinvent_to_database",
     "connect_ecoinvent_to_regioinvent",
     "change_electricity",

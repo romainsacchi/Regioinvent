@@ -108,7 +108,7 @@ def second_order_regionalization(regio):
                             process["location"],
                         )
                     ]
-                    exc["database"] = regio.regioinvent_database_name
+                    exc["database"] = regio.target_db_name
                     exc["input"] = (exc["database"], exc["code"])
         elif "technology mix" in process["name"]:
             for exc in process["exchanges"]:
@@ -129,7 +129,7 @@ def second_order_regionalization(regio):
                         exc["code"] = other_processes_data[
                             (exc["product"], process["location"])
                         ][i]["code"]
-                        exc["database"] = regio.regioinvent_database_name
+                        exc["database"] = regio.target_db_name
                         exc["location"] = process["location"]
                         exc["input"] = (exc["database"], exc["code"])
 
@@ -289,7 +289,7 @@ def second_order_regionalization(regio):
                         ]
                         exc["name"] = "technology mix for " + exc["product"]
                         exc["location"] = process["location"]
-                        exc["database"] = regio.regioinvent_database_name
+                        exc["database"] = regio.target_db_name
                         exc["input"] = (exc["database"], exc["code"])
                     except KeyError:
                         pass

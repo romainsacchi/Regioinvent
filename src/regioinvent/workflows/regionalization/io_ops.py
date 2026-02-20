@@ -45,7 +45,7 @@ def format_trade_data(regio):
     )
 
 
-def write_database(regio):
+def write_database(regio, target_db_name=None):
     """
     Write the final in-memory database to Brightway as a single database.
     """
@@ -54,6 +54,8 @@ def write_database(regio):
         raise ValueError(
             "No in-memory final database found. Run regionalize_ecoinvent_with_trade() first."
         )
+
+    regio.target_db_name = target_db_name or f"{regio.source_db_name} - regionalized"
 
     regio.logger.info("Write in-memory database to brightway...")
     regio.logger.info("Normalizing in-memory datasets before write...")
@@ -67,12 +69,12 @@ def write_database(regio):
     code_to_new_candidates = collections.defaultdict(set)
     for old_key, ds in final_data.items():
         new_code = uuid.uuid4().hex
-        old_to_new[old_key] = (regio.regioinvent_database_name, new_code)
+        old_to_new[old_key] = (regio.target_db_name, new_code)
         if old_key[1] is not None:
             code_to_new_candidates[old_key[1]].add(
-                (regio.regioinvent_database_name, new_code)
+                (regio.target_db_name, new_code)
             )
-        ds["database"] = regio.regioinvent_database_name
+        ds["database"] = regio.target_db_name
         ds["code"] = new_code
 
     # Resolve code-only fallback only when unambiguous.
@@ -87,10 +89,10 @@ def write_database(regio):
     for _, ds in final_data.items():
         for exc in ds["exchanges"]:
             if exc["type"] in ["technosphere", "production"]:
-                exc["database"] = regio.regioinvent_database_name
+                exc["database"] = regio.target_db_name
                 if exc["type"] == "production":
                     exc["code"] = ds["code"]
-                    exc["input"] = (regio.regioinvent_database_name, ds["code"])
+                    exc["input"] = (regio.target_db_name, ds["code"])
                 else:
                     target = None
                     old_input = exc.get("input")
@@ -105,20 +107,20 @@ def write_database(regio):
                         exc["input"] = target
                     elif "code" in exc:
                         # Fallback: still populate an input in target database namespace.
-                        exc["input"] = (regio.regioinvent_database_name, exc["code"])
+                        exc["input"] = (regio.target_db_name, exc["code"])
             elif "input" not in exc and "database" in exc and "code" in exc:
                 exc["input"] = (exc["database"], exc["code"])
             if exc["type"] == "production":
-                exc["output"] = (regio.regioinvent_database_name, ds["code"])
+                exc["output"] = (regio.target_db_name, ds["code"])
         ds.pop("categories", None)
         ds.pop("parameters", None)
-        normalized_data[(regio.regioinvent_database_name, ds["code"])] = ds
+        normalized_data[(regio.target_db_name, ds["code"])] = ds
 
-    if regio.regioinvent_database_name in bw2.databases:
-        del bw2.databases[regio.regioinvent_database_name]
+    if regio.target_db_name in bw2.databases:
+        del bw2.databases[regio.target_db_name]
 
     regio.logger.info("Starting Brightway write...")
-    bw2.Database(regio.regioinvent_database_name).write(normalized_data)
+    bw2.Database(regio.target_db_name).write(normalized_data)
 
 
 def connect_ecoinvent_to_regioinvent(regio):
@@ -199,7 +201,7 @@ def connect_ecoinvent_to_regioinvent(regio):
                         tech_key = ("technology mix for " + exc["product"], "RoW")
                     if tech_key in techno_mixes:
                         exc["code"] = techno_mixes[tech_key]
-                        exc["database"] = regio.regioinvent_database_name
+                        exc["database"] = regio.target_db_name
                         exc["name"] = tech_key[0]
                         exc["location"] = tech_key[1]
                         exc["input"] = (exc["database"], exc["code"])
@@ -270,7 +272,7 @@ def connect_ecoinvent_to_regioinvent(regio):
                 if exc["location"] not in ["RoW", "CH"]:
                     match_key = (exc["product"], exc["name"], exc["location"])
                     if match_key in regio_dict:
-                        exc["database"] = regio.regioinvent_database_name
+                        exc["database"] = regio.target_db_name
                         exc["code"] = regio_dict[match_key]
                         exc["input"] = (exc["database"], exc["code"])
 

@@ -2,20 +2,19 @@ import sqlite3
 
 
 def regionalize_ecoinvent_with_trade(
-    regio, trade_database_path, regioinvent_database_name, cutoff
+    regio, trade_database_path, cutoff
 ):
     """
     Function runs all the necessary sub-functions to incorporate trade data within ecoinvent supply chains
     descriptions
     :param trade_database_path: [str] the path to the trade database
-    :param regioinvent_database_name: [str] the name to be given to the generated regioinvent database
     :param cutoff: [float] the amount (between 0 and 1) after which exports/imports values of countries will be aggregated
                     into a Rest-of-theWorld aggregate.
     :return:
     """
 
     regio.trade_conn = sqlite3.connect(trade_database_path)
-    regio.regioinvent_database_name = regioinvent_database_name
+    regio.target_db_name = f"{regio.source_db_name} - regionalized"
     regio.cutoff = cutoff
 
     if cutoff > 0.99 or cutoff < 0:

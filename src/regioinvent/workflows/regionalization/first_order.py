@@ -5,7 +5,6 @@ import uuid
 from collections import defaultdict
 from importlib.resources import as_file, files
 
-import brightway2 as bw2
 import pandas as pd
 import wurst.searching as ws
 from tqdm import tqdm
@@ -57,7 +56,11 @@ def first_order_regionalization(regio):
 
     # Cache repeated transport code -> reference product lookups.
     transport_ref_product_cache = {}
-    ei_regio_db = bw2.Database(regio.name_ei_with_regionalized_biosphere)
+    code_to_ref_product = {
+        ds.get("code"): ds.get("reference product")
+        for ds in regio.ei_wurst
+        if ds.get("code") and ds.get("reference product")
+    }
     # Cache template input-presence flags to avoid repeated exchange scans.
     template_input_flags_cache = {}
     # Speed up irrelevant-process checks.
@@ -181,7 +184,7 @@ def first_order_regionalization(regio):
         global_market_activity["code"] = uuid.uuid4().hex
 
         # change database
-        global_market_activity["database"] = regio.regioinvent_database_name
+        global_market_activity["database"] = regio.target_db_name
 
         # reset exchanges with only the production exchange
         global_market_activity["exchanges"] = [
@@ -192,7 +195,7 @@ def first_order_regionalization(regio):
                 "name": global_market_activity["name"],
                 "unit": global_market_activity["unit"],
                 "location": global_market_activity["location"],
-                "database": regio.regioinvent_database_name,
+                "database": regio.target_db_name,
                 "code": global_market_activity["code"],
                 "input": (
                     global_market_activity["database"],
@@ -226,7 +229,7 @@ def first_order_regionalization(regio):
             # change code
             regio_process["code"] = uuid.uuid4().hex
             # change database
-            regio_process["database"] = regio.regioinvent_database_name
+            regio_process["database"] = regio.target_db_name
             # add a type to the process (to differentiate from biosphere flows)
             regio_process["type"] = 'process'
             # add comment
@@ -256,7 +259,7 @@ def first_order_regionalization(regio):
                     "product": regio_process["reference product"],
                     "unit": regio_process["unit"],
                     "location": prod_country,
-                    "database": regio.regioinvent_database_name,
+                    "database": regio.target_db_name,
                     "code": global_market_activity["code"],
                     "input": (regio_process["database"], regio_process["code"]),
                     "output": (
@@ -400,9 +403,11 @@ def first_order_regionalization(regio):
         # add transportation to production market
         for transportation_mode in regio.transportation_modes[product]:
             if transportation_mode not in transport_ref_product_cache:
-                transport_ref_product_cache[transportation_mode] = (
-                    ei_regio_db.get(transportation_mode).as_dict()["reference product"]
+                transport_ref_product_cache[transportation_mode] = code_to_ref_product.get(
+                    transportation_mode
                 )
+            if not transport_ref_product_cache[transportation_mode]:
+                continue
             global_market_activity["exchanges"].append(
                 {
                     "amount": regio.transportation_modes[product][
@@ -471,7 +476,7 @@ def first_order_regionalization(regio):
             # change code
             regio_process["code"] = uuid.uuid4().hex
             # change database
-            regio_process["database"] = regio.regioinvent_database_name
+            regio_process["database"] = regio.target_db_name
             # add comment
             regio_process["comment"] = (
                 f"""This process is a regionalized adaptation of the following process of the ecoinvent database: {activity} | {product} | {region}. No amount values were modified in the regionalization process, only the origin of the flows."""
@@ -514,7 +519,7 @@ def first_order_regionalization(regio):
             # change code
             regio_process["code"] = uuid.uuid4().hex
             # change database
-            regio_process["database"] = regio.regioinvent_database_name
+            regio_process["database"] = regio.target_db_name
             # add comment
             regio_process["comment"] = (
                 f"""This process is a regionalized adaptation of the following process of the ecoinvent database: {regio_process['name']} | {product} | {region}. No amount values were modified in the regionalization process, only the origin of the flows."""

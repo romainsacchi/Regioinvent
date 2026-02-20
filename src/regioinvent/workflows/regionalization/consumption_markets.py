@@ -122,7 +122,7 @@ def create_consumption_markets(regio):
                 "unit": regio.unit[product],
                 "code": uuid.uuid4().hex,
                 "comment": f"""This process represents the consumption market of {product} in {consumer}. The shares were determined based on two aspects. The imports of the commodity {regio.eco_to_hs_class[product]} taken from the BACI database (average over the years 2018, 2019, 2020, 2021, 2022). The domestic consumption data was extracted/estimated from {source}.""",
-                "database": regio.regioinvent_database_name,
+                "database": regio.target_db_name,
                 "exchanges": [],
             }
 
@@ -132,7 +132,7 @@ def create_consumption_markets(regio):
                     "amount": 1,
                     "type": "production",
                     "input": (
-                        regio.regioinvent_database_name,
+                        regio.target_db_name,
                         new_import_data["code"],
                     ),
                 }
@@ -152,7 +152,7 @@ def create_consumption_markets(regio):
                         code = partner_codes[technology]
                         # get the share
                         share = tech_distribution[technology]
-                        inp = (regio.regioinvent_database_name, code)
+                        inp = (regio.target_db_name, code)
                         exchange_amounts[inp] += partner_share * share
                         if inp not in exchange_templates:
                             exchange_templates[inp] = {
@@ -168,7 +168,7 @@ def create_consumption_markets(regio):
                         code = partner_codes[technology]
                         # get the share
                         share = tech_distribution[technology]
-                        inp = (regio.regioinvent_database_name, code)
+                        inp = (regio.target_db_name, code)
                         exchange_amounts[inp] += partner_share * share
                         if inp not in exchange_templates:
                             exchange_templates[inp] = {
