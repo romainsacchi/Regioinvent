@@ -121,7 +121,7 @@ def configured_regio():
 
     # Same workflow as doc/demo.ipynb
     regio.spatialize_my_ecoinvent()
-    regio.import_fully_regionalized_impact_method(lcia_method="all")
+    regio.import_fully_regionalized_impact_method()
     regio.regionalize_ecoinvent_with_trade(
         trade_database_path=trade_db_path,
         cutoff=cutoff,
@@ -135,7 +135,7 @@ def test_demo_workflow_lca_regression(configured_regio):
     method = _pick_method()
     regio_db_name = configured_regio.target_db_name
     db_len = len(bd.Database(regio_db_name))
-    assert db_len == 228070, f"Unexpected {regio_db_name} size: {db_len}"
+    assert db_len == 251593, f"Unexpected {regio_db_name} size: {db_len}"
 
     if os.getenv("REGIO_TEST_ASSERT_SCORES", "0") != "1":
         pytest.skip(
