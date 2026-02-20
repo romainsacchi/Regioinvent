@@ -39,10 +39,7 @@ jobs:
 
       - name: Smoke import
         run: |
-          python - <<'PY'
-          import regioinvent
-          print("regioinvent import OK")
-          PY
+          python -c "import regioinvent; print('regioinvent import OK')"
 
   workflow-smoke:
     name: Workflow smoke (Ubuntu, py3.11, bw2)
