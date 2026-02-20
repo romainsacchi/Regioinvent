@@ -4,7 +4,6 @@ import json
 import uuid
 from importlib.resources import as_file, files
 
-import brightway2 as bw2
 import pandas as pd
 import wurst.searching as ws
 from tqdm import tqdm

@@ -12,7 +12,7 @@ date created: 06-04-24
 import json
 import logging
 
-import brightway2 as bw2
+import bw2data as bd
 import pandas as pd
 from importlib.resources import files, as_file
 from regioinvent.wurst_compat import extract_brightway2_databases_compat
@@ -92,12 +92,12 @@ class Regioinvent:
         self.logger.propagate = False
 
         # set up brightway project
-        if bw_project_name not in bw2.projects:
+        if bw_project_name not in bd.projects:
             raise KeyError(
                 "The brightway project name passed does not match with any existing brightway projects."
             )
-        bw2.projects.set_current(bw_project_name)
-        if ecoinvent_database_name not in bw2.databases:
+        bd.projects.set_current(bw_project_name)
+        if ecoinvent_database_name not in bd.databases:
             raise KeyError(
                 "The ecoinvent database name passed does not match with the existing databases within the brightway project."
             )
@@ -270,7 +270,7 @@ class Regioinvent:
                 pass
 
         # write ecoinvent-regionalized database
-        bw2.Database(self.name_ei_with_regionalized_biosphere).write(self.ei_regio_data)
+        bd.Database(self.name_ei_with_regionalized_biosphere).write(self.ei_regio_data)
 
     def format_trade_data(self):
         return workflow_format_trade_data(self)

@@ -2,7 +2,7 @@ import json
 import pickle
 from importlib.resources import as_file, files
 
-import brightway2 as bw2
+import bw2data as bd
 
 from regioinvent.wurst_compat import extract_brightway2_databases_compat
 
@@ -18,7 +18,7 @@ def spatialize_my_ecoinvent(regio):
 
     # ---------------------------- Create the spatialized biosphere ----------------------------
 
-    if "biosphere3_spatialized_flows" not in bw2.databases:
+    if "biosphere3_spatialized_flows" not in bd.databases:
         regio.logger.info("Creating spatialized biosphere flows...")
         # load the correct pickle file with the different spatialized elementary flows metadata
         with as_file(
@@ -30,7 +30,7 @@ def spatialize_my_ecoinvent(regio):
                 spatialized_biosphere = pickle.load(f)
 
         # create the new biosphere3 database with spatialized elementary flows
-        bw2.Database(regio.name_spatialized_biosphere).write(spatialized_biosphere)
+        bd.Database(regio.name_spatialized_biosphere).write(spatialized_biosphere)
     else:
         regio.logger.info("biosphere3_spatialized_flows already exists in this project.")
 

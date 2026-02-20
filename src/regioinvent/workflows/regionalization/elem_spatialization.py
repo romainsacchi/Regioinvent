@@ -4,7 +4,7 @@ import json
 import uuid
 from importlib.resources import as_file, files
 
-import brightway2 as bw2
+import bw2data as bd
 import pandas as pd
 import wurst.searching as ws
 from tqdm import tqdm
@@ -27,7 +27,7 @@ def spatialize_elem_flows(regio):
     # a dictionary with all the associated uuids of the spatialized flows
     regionalized_flows = {
         (i.as_dict()["name"], i.as_dict()["categories"]): i.as_dict()["code"]
-        for i in bw2.Database(regio.name_spatialized_biosphere)
+        for i in bd.Database(regio.name_spatialized_biosphere)
     }
 
     # loop through regioinvent processes

@@ -1,7 +1,7 @@
 import collections
 import uuid
 
-import brightway2 as bw2
+import bw2data as bd
 import pandas as pd
 
 
@@ -117,9 +117,9 @@ def write_database(regio, target_db_name=None):
         normalized_data[(regio.target_db_name, ds["code"])] = ds
 
     # Ensure biosphere exchanges point to valid flow codes in either biosphere database.
-    spatialized_records = [flow.as_dict() for flow in bw2.Database(regio.name_spatialized_biosphere)]
+    spatialized_records = [flow.as_dict() for flow in bd.Database(regio.name_spatialized_biosphere)]
     base_biosphere_name = "biosphere3"
-    base_records = [flow.as_dict() for flow in bw2.Database(base_biosphere_name)]
+    base_records = [flow.as_dict() for flow in bd.Database(base_biosphere_name)]
 
     spatialized_codes = {flow["code"] for flow in spatialized_records}
     base_codes = {flow["code"] for flow in base_records}
@@ -172,11 +172,11 @@ def write_database(regio, target_db_name=None):
                 exc["code"] = code
                 exc["input"] = (exc["database"], exc["code"])
 
-    if regio.target_db_name in bw2.databases:
-        del bw2.databases[regio.target_db_name]
+    if regio.target_db_name in bd.databases:
+        del bd.databases[regio.target_db_name]
 
     regio.logger.info("Starting Brightway write...")
-    bw2.Database(regio.target_db_name).write(normalized_data)
+    bd.Database(regio.target_db_name).write(normalized_data)
 
 
 def connect_ecoinvent_to_regioinvent(regio):

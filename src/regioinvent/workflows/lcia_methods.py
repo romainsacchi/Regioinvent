@@ -1,12 +1,13 @@
 from importlib.resources import as_file, files
 
-import brightway2 as bw2
+import bw2data as bd
+import bw2io as bi
 import numpy as np
 
 
 def _has_method_family(method_fragment):
     fragment = method_fragment.lower()
-    return any(fragment in " | ".join(method).lower() for method in bw2.methods)
+    return any(fragment in " | ".join(method).lower() for method in bd.methods)
 
 
 def _import_method_package(regio, relpath, method_fragment, label):
@@ -16,7 +17,7 @@ def _import_method_package(regio, relpath, method_fragment, label):
 
     with as_file(files("regioinvent").joinpath(relpath)) as file_path:
         try:
-            bw2.BW2Package.import_file(file_path)
+            bi.BW2Package.import_file(file_path)
         except EOFError:
             regio.logger.warning(
                 f"Failed importing {label} due to EOFError while backing up existing methods. "
