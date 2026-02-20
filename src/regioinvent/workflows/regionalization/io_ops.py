@@ -1,4 +1,5 @@
 import collections
+import uuid
 
 import brightway2 as bw2
 import pandas as pd
@@ -44,32 +45,80 @@ def format_trade_data(regio):
     )
 
 
-def write_regioinvent_to_database(regio):
+def write_database(regio):
     """
-    Function write a dictionary of datasets to the brightway2 SQL database
+    Write the final in-memory database to Brightway as a single database.
     """
 
-    regio.logger.info("Write regioinvent database to brightway...")
+    if not getattr(regio, "_final_database_in_memory", None):
+        raise ValueError(
+            "No in-memory final database found. Run regionalize_ecoinvent_with_trade() first."
+        )
 
-    # change regioinvent data from wurst to bw2 structure
-    regioinvent_data = {(i["database"], i["code"]): i for i in regio.regioinvent_in_wurst}
+    regio.logger.info("Write in-memory database to brightway...")
+    regio.logger.info("Normalizing in-memory datasets before write...")
 
-    # recreate inputs in edges (exchanges)
-    for pr in regioinvent_data:
-        for exc in regioinvent_data[pr]["exchanges"]:
-            try:
-                exc["input"]
-            except KeyError:
+    final_data = {
+        (ds["database"], ds["code"]): ds for ds in regio._final_database_in_memory
+    }
+
+    # Assign fresh UUID codes to every dataset and keep mapping from old -> new.
+    old_to_new = {}
+    code_to_new_candidates = collections.defaultdict(set)
+    for old_key, ds in final_data.items():
+        new_code = uuid.uuid4().hex
+        old_to_new[old_key] = (regio.regioinvent_database_name, new_code)
+        if old_key[1] is not None:
+            code_to_new_candidates[old_key[1]].add(
+                (regio.regioinvent_database_name, new_code)
+            )
+        ds["database"] = regio.regioinvent_database_name
+        ds["code"] = new_code
+
+    # Resolve code-only fallback only when unambiguous.
+    code_to_new = {
+        old_code: list(targets)[0]
+        for old_code, targets in code_to_new_candidates.items()
+        if len(targets) == 1
+    }
+
+    # Export as a single database: normalize links to target DB.
+    normalized_data = {}
+    for _, ds in final_data.items():
+        for exc in ds["exchanges"]:
+            if exc["type"] in ["technosphere", "production"]:
+                exc["database"] = regio.regioinvent_database_name
+                if exc["type"] == "production":
+                    exc["code"] = ds["code"]
+                    exc["input"] = (regio.regioinvent_database_name, ds["code"])
+                else:
+                    target = None
+                    old_input = exc.get("input")
+                    if isinstance(old_input, tuple) and len(old_input) == 2:
+                        target = old_to_new.get((old_input[0], old_input[1]))
+                    if target is None and "database" in exc and "code" in exc:
+                        target = old_to_new.get((exc["database"], exc["code"]))
+                    if target is None and "code" in exc:
+                        target = code_to_new.get(exc["code"])
+                    if target is not None:
+                        exc["code"] = target[1]
+                        exc["input"] = target
+                    elif "code" in exc:
+                        # Fallback: still populate an input in target database namespace.
+                        exc["input"] = (regio.regioinvent_database_name, exc["code"])
+            elif "input" not in exc and "database" in exc and "code" in exc:
                 exc["input"] = (exc["database"], exc["code"])
-    # wurst creates empty categories for activities, this creates an issue when you try to write the bw2 database
-    for pr in regioinvent_data:
-        try:
-            del regioinvent_data[pr]["categories"]
-        except KeyError:
-            pass
+            if exc["type"] == "production":
+                exc["output"] = (regio.regioinvent_database_name, ds["code"])
+        ds.pop("categories", None)
+        ds.pop("parameters", None)
+        normalized_data[(regio.regioinvent_database_name, ds["code"])] = ds
 
-    # write regioinvent database in brightway2
-    bw2.Database(regio.regioinvent_database_name).write(regioinvent_data)
+    if regio.regioinvent_database_name in bw2.databases:
+        del bw2.databases[regio.regioinvent_database_name]
+
+    regio.logger.info("Starting Brightway write...")
+    bw2.Database(regio.regioinvent_database_name).write(normalized_data)
 
 
 def connect_ecoinvent_to_regioinvent(regio):
@@ -81,7 +130,6 @@ def connect_ecoinvent_to_regioinvent(regio):
     I am not sure regioinvent would bring more precision in that specific case.
     """
 
-    # Here we are directly manipulating (through bw2) the already-written ecoinvent database [self.name_ei_with_regionalized_biosphere]
     regio.logger.info("Connecting ecoinvent to regioinvent processes...")
 
     # as dictionary to speed searching for information
@@ -97,137 +145,139 @@ def connect_ecoinvent_to_regioinvent(regio):
         if "technology mix" in i["name"]
     }
 
-    for process in bw2.Database(regio.name_ei_with_regionalized_biosphere):
+    for process in regio.ei_wurst:
         # find country/sub-country locations for process, we ignore regions
         location = None
         # for countries (e.g., CA)
-        if process.as_dict()["location"] in regio.country_to_ecoinvent_regions.keys():
-            location = process.as_dict()["location"]
+        if process["location"] in regio.country_to_ecoinvent_regions.keys():
+            location = process["location"]
         # for sub-countries (e.g., CA-QC)
         elif (
-            process.as_dict()["location"].split("-")[0]
+            process["location"].split("-")[0]
             in regio.country_to_ecoinvent_regions.keys()
         ):
-            location = process.as_dict()["location"].split("-")[0]
+            location = process["location"].split("-")[0]
         # check if location is not None and not Switzerland
         if location and location != "CH":
             # loop through technosphere exchanges
-            for exc in process.technosphere():
+            for exc in process["exchanges"]:
+                if exc.get("type") != "technosphere":
+                    continue
                 # if the product of the exchange is among the internationally traded commodities
-                if exc.as_dict()["product"] in regio.eco_to_hs_class.keys():
+                if exc["product"] in regio.eco_to_hs_class.keys():
                     # get the name of the corresponding consumtion market
-                    exc.as_dict()["name"] = "consumption market for " + exc.as_dict()["product"]
+                    exc["name"] = "consumption market for " + exc["product"]
                     # get the location of the process
-                    exc.as_dict()["location"] = location
+                    exc["location"] = location
                     # if the consumption market exists for the process location
                     if (
-                        "consumption market for " + exc.as_dict()["product"],
+                        "consumption market for " + exc["product"],
                         location,
                     ) in consumption_markets_data.keys():
-                        exc.as_dict()["database"] = consumption_markets_data[
-                            ("consumption market for " + exc.as_dict()["product"], location)
+                        exc["database"] = consumption_markets_data[
+                            ("consumption market for " + exc["product"], location)
                         ]["database"]
-                        exc.as_dict()["code"] = consumption_markets_data[
-                            ("consumption market for " + exc.as_dict()["product"], location)
+                        exc["code"] = consumption_markets_data[
+                            ("consumption market for " + exc["product"], location)
                         ]["code"]
                     # if the consumption market does not exist for the process location, take RoW
                     else:
-                        exc.as_dict()["database"] = consumption_markets_data[
-                            ("consumption market for " + exc.as_dict()["product"], "RoW")
+                        exc["database"] = consumption_markets_data[
+                            ("consumption market for " + exc["product"], "RoW")
                         ]["database"]
-                        exc.as_dict()["code"] = consumption_markets_data[
-                            ("consumption market for " + exc.as_dict()["product"], "RoW")
+                        exc["code"] = consumption_markets_data[
+                            ("consumption market for " + exc["product"], "RoW")
                         ]["code"]
-                    exc.as_dict()["input"] = (exc.as_dict()["database"], exc.as_dict()["code"])
-                    exc.save()
+                    exc["input"] = (exc["database"], exc["code"])
                 # if the product of the exchange is among the non-international traded commodities
                 elif (
-                    exc.as_dict()["product"] in regionalized_products
-                    and exc.as_dict()["product"] not in regio.eco_to_hs_class.keys()
+                    exc["product"] in regionalized_products
+                    and exc["product"] not in regio.eco_to_hs_class.keys()
                 ):
-                    try:
-                        # if techno mix for location exists
-                        exc.as_dict()["code"] = techno_mixes[
-                            ("technology mix for " + exc.as_dict()["product"], location)
-                        ]
-                        exc.as_dict()["database"] = regio.regioinvent_database_name
-                        exc.as_dict()["name"] = "technology mix for " + exc.as_dict()["product"]
-                        exc.as_dict()["location"] = location
-                        exc.as_dict()["input"] = (
-                            exc.as_dict()["database"],
-                            exc.as_dict()["code"],
-                        )
-                        exc.save()
-                    except KeyError:
-                        # if not, link to RoW
-                        exc.as_dict()["code"] = techno_mixes[
-                            ("technology mix for " + exc.as_dict()["product"], "RoW")
-                        ]
-                        exc.as_dict()["database"] = regio.regioinvent_database_name
-                        exc.as_dict()["name"] = "technology mix for " + exc.as_dict()["product"]
-                        exc.as_dict()["location"] = "RoW"
-                        exc.as_dict()["input"] = (exc.as_dict()["database"], exc.as_dict()["code"])
-                        exc.save()
+                    tech_key = ("technology mix for " + exc["product"], location)
+                    if tech_key not in techno_mixes:
+                        tech_key = ("technology mix for " + exc["product"], "RoW")
+                    if tech_key in techno_mixes:
+                        exc["code"] = techno_mixes[tech_key]
+                        exc["database"] = regio.regioinvent_database_name
+                        exc["name"] = tech_key[0]
+                        exc["location"] = tech_key[1]
+                        exc["input"] = (exc["database"], exc["code"])
 
     # aggregating duplicate inputs (e.g., multiple consumption markets RoW callouts)
-    for process in bw2.Database(regio.name_ei_with_regionalized_biosphere):
+    for process in regio.ei_wurst:
         duplicates = [
             item
             for item, count in collections.Counter(
                 [
                     (
-                        i.as_dict()["input"],
-                        i.as_dict()["name"],
-                        i.as_dict()["product"],
-                        i.as_dict()["location"],
-                        i.as_dict()["database"],
-                        i.as_dict()["code"],
+                        i["input"],
+                        i["name"],
+                        i["product"],
+                        i["location"],
+                        i["database"],
+                        i["code"],
                     )
-                    for i in process.technosphere()
+                    for i in process["exchanges"]
+                    if i.get("type") == "technosphere"
                 ]
             ).items()
             if count > 1
         ]
 
         for duplicate in duplicates:
-            total = sum([i["amount"] for i in process.technosphere() if i["input"] == duplicate[0]])
-            [i.delete() for i in process.technosphere() if i["input"] == duplicate[0]]
-            new_exc = process.new_exchange(
-                amount=total,
-                type="technosphere",
-                input=duplicate[0],
-                name=duplicate[1],
-                product=duplicate[2],
-                location=duplicate[3],
-                database=duplicate[4],
-                code=duplicate[5],
+            total = sum(
+                [
+                    i["amount"]
+                    for i in process["exchanges"]
+                    if i.get("type") == "technosphere" and i["input"] == duplicate[0]
+                ]
             )
-            new_exc.save()
+            process["exchanges"] = [
+                i
+                for i in process["exchanges"]
+                if not (i.get("type") == "technosphere" and i["input"] == duplicate[0])
+            ]
+            process["exchanges"].append(
+                {
+                    "amount": total,
+                    "type": "technosphere",
+                    "input": duplicate[0],
+                    "name": duplicate[1],
+                    "product": duplicate[2],
+                    "location": duplicate[3],
+                    "database": duplicate[4],
+                    "code": duplicate[5],
+                }
+            )
 
     # we also change production processes of ecoinvent for regionalized production processes of regioinvent
     regio_dict = {
         (
-            i.as_dict()["reference product"],
-            i.as_dict()["name"],
-            i.as_dict()["location"],
-        ): i
-        for i in bw2.Database(regio.regioinvent_database_name)
+            i["reference product"],
+            i["name"],
+            i["location"],
+        ): i["code"]
+        for i in regio.regioinvent_in_wurst
     }
 
-    for process in bw2.Database(regio.name_ei_with_regionalized_biosphere):
-        for exc in process.technosphere():
-            if exc.as_dict()["product"] in regio.eco_to_hs_class.keys():
+    for process in regio.ei_wurst:
+        for exc in process["exchanges"]:
+            if exc.get("type") != "technosphere":
+                continue
+            if exc["product"] in regio.eco_to_hs_class.keys():
                 # same thing, we don't touch Swiss processes
-                if exc.as_dict()["location"] not in ["RoW", "CH"]:
-                    try:
-                        exc.as_dict()["database"] = regio.regioinvent_database_name
-                        exc.as_dict()["code"] = regio_dict[
-                            (
-                                exc.as_dict()["product"],
-                                exc.as_dict()["name"],
-                                exc.as_dict()["location"],
-                            )
-                        ].as_dict()["code"]
-                        exc.as_dict()["input"] = (exc.as_dict()["database"], exc.as_dict()["code"])
-                    except KeyError:
-                        pass
+                if exc["location"] not in ["RoW", "CH"]:
+                    match_key = (exc["product"], exc["name"], exc["location"])
+                    if match_key in regio_dict:
+                        exc["database"] = regio.regioinvent_database_name
+                        exc["code"] = regio_dict[match_key]
+                        exc["input"] = (exc["database"], exc["code"])
+
+    # Build final in-memory database that can later be written once.
+    regio._final_database_in_memory = list(regio.ei_wurst) + list(regio.regioinvent_in_wurst)
+
+
+def write_regioinvent_to_database(regio):
+    """Backward-compatible alias for write_database()."""
+    return write_database(regio)
