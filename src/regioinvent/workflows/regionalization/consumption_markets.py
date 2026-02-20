@@ -4,29 +4,25 @@ import uuid
 import pandas as pd
 from tqdm import tqdm
 
+
 def create_consumption_markets(regio):
     """
     Function creating consumption markets for each regionalized process
     :return:  regio.regioinvent_in_wurst with new regionalized processes
     """
 
-    regio.logger.info(
-        "Creating consumption markets for internationally-traded products..."
-    )
+    regio.logger.info("Creating consumption markets for internationally-traded products...")
 
     # change to dictionary to speed searching for info
     regio.regioinvent_in_dict = {
         tech: []
-        for tech in [
-            (i["reference product"], i["location"])
-            for i in regio.regioinvent_in_wurst
-        ]
+        for tech in [(i["reference product"], i["location"]) for i in regio.regioinvent_in_wurst]
     }
     # populate the empty dictionary
     for process in regio.regioinvent_in_wurst:
-        regio.regioinvent_in_dict[
-            (process["reference product"], process["location"])
-        ].append({process["name"]: process})
+        regio.regioinvent_in_dict[(process["reference product"], process["location"])].append(
+            {process["name"]: process}
+        )
 
     # Precompute mean trade quantities once for all products to avoid repeated groupby work.
     consumption_by_cmd = (
@@ -35,36 +31,27 @@ def create_consumption_markets(regio):
         .sort_index()
     )
     # Precompute source text once per cmdCode.
-    source_by_cmd = (
-        regio.domestic_production.groupby("cmdCode")["source"].first().to_dict()
-    )
+    source_by_cmd = regio.domestic_production.groupby("cmdCode")["source"].first().to_dict()
 
     for product in tqdm(regio.eco_to_hs_class, leave=True):
         cmd_code = regio.eco_to_hs_class[product]
         # filter the product in regio.consumption_data
         try:
-            cmd_consumption_data = consumption_by_cmd.xs(cmd_code, level=0).to_frame(
-                "quantity (t)"
-            )
+            cmd_consumption_data = consumption_by_cmd.xs(cmd_code, level=0).to_frame("quantity (t)")
         except KeyError:
             # No trade data for this product.
             continue
         # change to relative values
         consumers = (
-            cmd_consumption_data.groupby(level=0).sum()
-            / cmd_consumption_data.sum().sum()
+            cmd_consumption_data.groupby(level=0).sum() / cmd_consumption_data.sum().sum()
         ).sort_values(by="quantity (t)", ascending=False)
         # only keep consumers till the user-defined cut-off of total consumption
         limit = (
-            consumers.index.get_loc(
-                consumers[consumers.cumsum() > regio.cutoff].dropna().index[0]
-            )
+            consumers.index.get_loc(consumers[consumers.cumsum() > regio.cutoff].dropna().index[0])
             + 1
         )
         # aggregate the rest
-        remainder = (
-            cmd_consumption_data.loc[consumers.index[limit:]].groupby(level=1).sum()
-        )
+        remainder = cmd_consumption_data.loc[consumers.index[limit:]].groupby(level=1).sum()
         cmd_consumption_data = cmd_consumption_data.loc[consumers.index[:limit]]
         # assign the aggregate to RoW location
         cmd_consumption_data = pd.concat(
@@ -182,9 +169,7 @@ def create_consumption_markets(regio):
                     regio.name_ei_with_regionalized_biosphere,
                     transportation_mode,
                 )
-                exchange_amounts[inp] += regio.transportation_modes[product][
-                    transportation_mode
-                ]
+                exchange_amounts[inp] += regio.transportation_modes[product][transportation_mode]
                 if inp not in exchange_templates:
                     exchange_templates[inp] = {
                         "type": "technosphere",

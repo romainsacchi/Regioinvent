@@ -104,11 +104,19 @@ def change_electricity(regio, process, export_country):
 
         # special cases for special Swiss grid mixes
         if ", for Swiss Federal Railways" in electricity_product_name:
-            electricity_product_name = electricity_product_name.split(", for Swiss Federal Railways")[0]
-            electricity_activity_name = electricity_activity_name.split(", for Swiss Federal Railways")[0]
+            electricity_product_name = electricity_product_name.split(
+                ", for Swiss Federal Railways"
+            )[0]
+            electricity_activity_name = electricity_activity_name.split(
+                ", for Swiss Federal Railways"
+            )[0]
         if ", renewable energy products" in electricity_product_name:
-            electricity_product_name = electricity_product_name.split(", renewable energy products")[0]
-            electricity_activity_name = electricity_activity_name.split(", renewable energy products")[0]
+            electricity_product_name = electricity_product_name.split(
+                ", renewable energy products"
+            )[0]
+            electricity_activity_name = electricity_activity_name.split(
+                ", renewable energy products"
+            )[0]
 
         # get the uuid
         electricity_code = regio.ei_in_dict[
@@ -154,7 +162,9 @@ def change_aluminium_electricity(regio, process, export_country):
             [
                 i["product"]
                 for i in process["exchanges"]
-                if "electricity" in i["name"] and "aluminium" in i["name"] and "voltage" in i["name"]
+                if "electricity" in i["name"]
+                and "aluminium" in i["name"]
+                and "voltage" in i["name"]
             ]
         )
     )
@@ -165,7 +175,9 @@ def change_aluminium_electricity(regio, process, export_country):
                 [
                     i["unit"]
                     for i in process["exchanges"]
-                    if "electricity" in i["name"] and "aluminium" in i["name"] and "voltage" in i["name"]
+                    if "electricity" in i["name"]
+                    and "aluminium" in i["name"]
+                    and "voltage" in i["name"]
                 ]
             )
         )
@@ -247,13 +259,23 @@ def change_cobalt_electricity(regio, process):
     # identify cobalt-specific electricity related exchanges
     electricity_product_names = list(
         set(
-            [i["product"] for i in process["exchanges"] if "electricity" in i["name"] and "cobalt" in i["name"]]
+            [
+                i["product"]
+                for i in process["exchanges"]
+                if "electricity" in i["name"] and "cobalt" in i["name"]
+            ]
         )
     )
     # loop through the identified process
     for electricity_product_name in electricity_product_names:
         unit_name = list(
-            set([i["unit"] for i in process["exchanges"] if "electricity" in i["name"] and "cobalt" in i["name"]])
+            set(
+                [
+                    i["unit"]
+                    for i in process["exchanges"]
+                    if "electricity" in i["name"] and "cobalt" in i["name"]
+                ]
+            )
         )
         # if somehow different units used for electricity flows -> problem
         assert len(unit_name) == 1
@@ -311,12 +333,16 @@ def change_waste(regio, process, export_country):
     """
     # municipal solid waste exchanges all have the same name
     waste_product_name = "municipal solid waste"
-    unit_name = list(set([i["unit"] for i in process["exchanges"] if waste_product_name == i["product"]]))
+    unit_name = list(
+        set([i["unit"] for i in process["exchanges"] if waste_product_name == i["product"]])
+    )
     # if somehow different units used for MSW flows -> problem
     assert len(unit_name) == 1
     unit_name = unit_name[0]
     # sum quantity of all MSW exchanges
-    qty_of_waste = sum([i["amount"] for i in process["exchanges"] if waste_product_name == i["product"]])
+    qty_of_waste = sum(
+        [i["amount"] for i in process["exchanges"] if waste_product_name == i["product"]]
+    )
 
     # remove waste flows from non-appropriated geography
     for exc in process["exchanges"][:]:
@@ -488,18 +514,14 @@ def change_heat(regio, process, export_country, heat_flow):
                 }
                 heat_exchanges[
                     (
-                        [
-                            i
-                            for i in global_heat_process["exchanges"]
-                            if i["location"] == "CA-QC"
-                        ][0]["name"],
+                        [i for i in global_heat_process["exchanges"] if i["location"] == "CA-QC"][
+                            0
+                        ]["name"],
                         "CA-QC",
                     )
-                ] = [
-                    i
-                    for i in global_heat_process["exchanges"]
-                    if i["location"] == "CA-QC"
-                ][0]["amount"]
+                ] = [i for i in global_heat_process["exchanges"] if i["location"] == "CA-QC"][0][
+                    "amount"
+                ]
         else:
             # extracting amount of heat of country within region heat market process
             heat_exchanges = {}

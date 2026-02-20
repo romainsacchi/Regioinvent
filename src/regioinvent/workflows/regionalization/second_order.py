@@ -1,6 +1,7 @@
 import collections
 import copy
 
+
 def second_order_regionalization(regio):
     """
     Function that links newly created consumption markets to inputs of the different processes of the regionalized
@@ -28,9 +29,7 @@ def second_order_regionalization(regio):
             key = (i["reference product"], i["location"])
             other_processes_data[key].append(i)
 
-    regionalized_products = set(
-        [i["reference product"] for i in regio.regioinvent_in_wurst]
-    )
+    regionalized_products = set([i["reference product"] for i in regio.regioinvent_in_wurst])
 
     techno_mixes = {
         (i["name"], i["location"]): i["code"]
@@ -49,10 +48,7 @@ def second_order_regionalization(regio):
         ):
             # loop through exchanges
             for exc in process["exchanges"]:
-                if (
-                    exc["product"] in regio.eco_to_hs_class.keys()
-                    and exc["type"] == "technosphere"
-                ):
+                if exc["product"] in regio.eco_to_hs_class.keys() and exc["type"] == "technosphere":
                     # then get the name of the created consumption market for that product
                     exc["name"] = "consumption market for " + exc["product"]
                     # and get its location (same as the process)
@@ -87,10 +83,7 @@ def second_order_regionalization(regio):
                             ("consumption market for " + exc["product"], "RoW")
                         ]["code"]
                     exc["input"] = (exc["database"], exc["code"])
-                elif (
-                    exc["product"] in regionalized_products
-                    and exc["type"] == "technosphere"
-                ):
+                elif exc["product"] in regionalized_products and exc["type"] == "technosphere":
                     # connect to technology mix for the country
                     exc["name"] = "technology mix for " + exc["product"]
                     exc["location"] = process["location"]
@@ -106,21 +99,17 @@ def second_order_regionalization(regio):
             for exc in process["exchanges"]:
                 for i in range(
                     0,
-                    len(
-                        other_processes_data[(exc["product"], process["location"])]
-                    ),
+                    len(other_processes_data[(exc["product"], process["location"])]),
                 ):
                     # find correct technology for production
                     if (
-                        other_processes_data[(exc["product"], process["location"])][
-                            i
-                        ]["name"]
+                        other_processes_data[(exc["product"], process["location"])][i]["name"]
                         == exc["name"]
                     ):
                         # change info
-                        exc["code"] = other_processes_data[
-                            (exc["product"], process["location"])
-                        ][i]["code"]
+                        exc["code"] = other_processes_data[(exc["product"], process["location"])][
+                            i
+                        ]["code"]
                         exc["database"] = regio.target_db_name
                         exc["location"] = process["location"]
                         exc["input"] = (exc["database"], exc["code"])
@@ -141,9 +130,7 @@ def second_order_regionalization(regio):
                         exc["product"],
                         exc["location"],
                     ) not in used_techno_mixes:
-                        used_techno_mixes.append(
-                            (exc["name"], exc["product"], exc["location"])
-                        )
+                        used_techno_mixes.append((exc["name"], exc["product"], exc["location"]))
         # we want to make sure we always have the RoW technology mix for a default option
         if "technology mix" in process["name"] and "RoW" == process["location"]:
             if (
@@ -195,9 +182,7 @@ def second_order_regionalization(regio):
                         exc["product"],
                         exc["location"],
                     ) not in used_prod_processes:
-                        used_prod_processes.append(
-                            (exc["name"], exc["product"], exc["location"])
-                        )
+                        used_prod_processes.append((exc["name"], exc["product"], exc["location"]))
 
     even_more_reduced_regioinvent = []
     for ds in regio.regioinvent_in_wurst:
@@ -229,10 +214,7 @@ def second_order_regionalization(regio):
         ):
             # loop through exchanges
             for exc in process["exchanges"]:
-                if (
-                    exc["product"] in regio.eco_to_hs_class.keys()
-                    and exc["type"] == "technosphere"
-                ):
+                if exc["product"] in regio.eco_to_hs_class.keys() and exc["type"] == "technosphere":
                     # then get the name of the created consumption market for that product
                     exc["name"] = "consumption market for " + exc["product"]
                     # and get its location (same as the process)
@@ -267,10 +249,7 @@ def second_order_regionalization(regio):
                             ("consumption market for " + exc["product"], "RoW")
                         ]["code"]
                     exc["input"] = (exc["database"], exc["code"])
-                elif (
-                    exc["product"] in regionalized_products
-                    and exc["type"] == "technosphere"
-                ):
+                elif exc["product"] in regionalized_products and exc["type"] == "technosphere":
                     # connect to technology mix for the country
                     try:
                         exc["code"] = techno_mixes[
@@ -305,35 +284,13 @@ def second_order_regionalization(regio):
         ]
 
         for duplicate in duplicates:
-            total = sum(
-                [
-                    i["amount"]
-                    for i in process["exchanges"]
-                    if i["input"] == duplicate
-                ]
-            )
-            name = [
-                i["name"] for i in process["exchanges"] if i["input"] == duplicate
-            ][0]
-            product = [
-                i["product"]
-                for i in process["exchanges"]
-                if i["input"] == duplicate
-            ][0]
-            database = [
-                i["database"]
-                for i in process["exchanges"]
-                if i["input"] == duplicate
-            ][0]
-            location = [
-                i["location"]
-                for i in process["exchanges"]
-                if i["input"] == duplicate
-            ][0]
+            total = sum([i["amount"] for i in process["exchanges"] if i["input"] == duplicate])
+            name = [i["name"] for i in process["exchanges"] if i["input"] == duplicate][0]
+            product = [i["product"] for i in process["exchanges"] if i["input"] == duplicate][0]
+            database = [i["database"] for i in process["exchanges"] if i["input"] == duplicate][0]
+            location = [i["location"] for i in process["exchanges"] if i["input"] == duplicate][0]
 
-            process["exchanges"] = [
-                i for i in process["exchanges"] if i["input"] != duplicate
-            ] + [
+            process["exchanges"] = [i for i in process["exchanges"] if i["input"] != duplicate] + [
                 {
                     "amount": total,
                     "type": "technosphere",

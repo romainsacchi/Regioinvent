@@ -1,9 +1,7 @@
 import sqlite3
 
 
-def regionalize_ecoinvent_with_trade(
-    regio, trade_database_path, cutoff
-):
+def regionalize_ecoinvent_with_trade(regio, trade_database_path, cutoff):
     """
     Function runs all the necessary sub-functions to incorporate trade data within ecoinvent supply chains
     descriptions

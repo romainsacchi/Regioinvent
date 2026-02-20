@@ -47,7 +47,9 @@ def import_fully_regionalized_impact_method(regio, lcia_method="all"):
 
     # just load the correct BW2Package file from Data storage folder
     if lcia_method == "all" and regio.ecoinvent_version == "3.10":
-        regio.logger.info("Importing all available fully regionalized lcia methods for ecoinvent3.10.")
+        regio.logger.info(
+            "Importing all available fully regionalized lcia methods for ecoinvent3.10."
+        )
 
         _import_method_package(
             regio,
@@ -69,7 +71,9 @@ def import_fully_regionalized_impact_method(regio, lcia_method="all"):
         )
 
     if lcia_method == "all" and regio.ecoinvent_version == "3.9":
-        regio.logger.info("Importing all available fully regionalized lcia methods for ecoinvent3.9.")
+        regio.logger.info(
+            "Importing all available fully regionalized lcia methods for ecoinvent3.9."
+        )
 
         _import_method_package(
             regio,

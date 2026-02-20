@@ -82,9 +82,7 @@ class Regioinvent:
         self.logger = logging.getLogger("Regioinvent")
         self.logger.setLevel(logging.INFO)
         self.logger.handlers = []
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         ch = logging.StreamHandler()
         ch.setLevel(logging.DEBUG)
         ch.setFormatter(formatter)
@@ -104,9 +102,7 @@ class Regioinvent:
 
         # set up necessary variables
         self.source_db_name = ecoinvent_database_name
-        self.name_ei_with_regionalized_biosphere = (
-            ecoinvent_database_name + " regionalized"
-        )
+        self.name_ei_with_regionalized_biosphere = ecoinvent_database_name + " regionalized"
         if ecoinvent_version not in ["3.9", "3.9.1", "3.10", "3.10.1"]:
             raise KeyError(
                 "The version of ecoinvent you provided is not supported by Regioinvent."
@@ -120,63 +116,99 @@ class Regioinvent:
         self.name_spatialized_biosphere = "biosphere3_spatialized_flows"
 
         # load data from the different mapping files and such
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/ecoinvent_to_HS.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/ecoinvent_to_HS.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.eco_to_hs_class = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/HS_to_exiobase_name.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/HS_to_exiobase_name.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.hs_class_to_exio = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/country_to_ecoinvent_regions.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/country_to_ecoinvent_regions.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.country_to_ecoinvent_regions = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/electricity_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/electricity_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.electricity_geos = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/electricity_aluminium_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/electricity_aluminium_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.electricity_aluminium_geos = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/waste_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/waste_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.waste_geos = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/heat_industrial_ng_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/heat_industrial_ng_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.heat_district_ng = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/heat_industrial_non_ng_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/heat_industrial_non_ng_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.heat_district_non_ng = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/heat_small_scale_non_ng_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/heat_small_scale_non_ng_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.heat_small_scale_non_ng = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/COMTRADE_to_ecoinvent_geographies.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/COMTRADE_to_ecoinvent_geographies.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.convert_ecoinvent_geos = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/COMTRADE_to_exiobase_geographies.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/COMTRADE_to_exiobase_geographies.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.convert_exiobase_geos = json.load(f)
 
-        with as_file(files('regioinvent').joinpath(
-                f"data/Regionalization/ei{self.ecoinvent_version}/no_inputs_processes.json")) as file_path:
+        with as_file(
+            files("regioinvent").joinpath(
+                f"data/Regionalization/ei{self.ecoinvent_version}/no_inputs_processes.json"
+            )
+        ) as file_path:
             with open(file_path, "r") as f:
                 self.no_inputs_processes = json.load(f)
 
@@ -216,9 +248,7 @@ class Regioinvent:
         return workflow_import_fully_regionalized_impact_method(self, lcia_method)
 
     def regionalize_ecoinvent_with_trade(self, trade_database_path, cutoff):
-        return workflow_regionalize_ecoinvent_with_trade(
-            self, trade_database_path, cutoff
-        )
+        return workflow_regionalize_ecoinvent_with_trade(self, trade_database_path, cutoff)
 
     # TODO we use this function for showing the influence of spatialization for the article, after that, remove it
     def create_ecoinvent_copy_without_regionalized_biosphere_flows(self):

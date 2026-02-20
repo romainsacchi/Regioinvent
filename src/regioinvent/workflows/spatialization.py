@@ -41,9 +41,7 @@ def spatialize_my_ecoinvent(regio):
 
     # transform format of ecoinvent to wurst format for speed-up
     regio.logger.info("Extracting ecoinvent to wurst...")
-    regio.ei_wurst = extract_brightway2_databases_compat(
-        regio.source_db_name, add_identifiers=True
-    )
+    regio.ei_wurst = extract_brightway2_databases_compat(regio.source_db_name, add_identifiers=True)
 
     # also get ecoinvent in a format for more efficient searching
     regio.ei_in_dict = {
@@ -75,7 +73,9 @@ def spatialize_my_ecoinvent(regio):
                         # check if the category makes sense (don't regionalize mineral resources for instance)
                         if exc["categories"][0] in base_spatialized_flows[exc["name"]]:
                             # to spatialize it, we need to get the uuid of the existing spatialized flow
-                            exc["code"] = f"{exc['name']}, {process['location']}, {exc['categories']}"
+                            exc["code"] = (
+                                f"{exc['name']}, {process['location']}, {exc['categories']}"
+                            )
 
                             # change the database of the exchange as well
                             exc["database"] = regio.name_spatialized_biosphere

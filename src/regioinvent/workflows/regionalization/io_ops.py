@@ -60,9 +60,7 @@ def write_database(regio, target_db_name=None):
     regio.logger.info("Write in-memory database to brightway...")
     regio.logger.info("Normalizing in-memory datasets before write...")
 
-    final_data = {
-        (ds["database"], ds["code"]): ds for ds in regio._final_database_in_memory
-    }
+    final_data = {(ds["database"], ds["code"]): ds for ds in regio._final_database_in_memory}
 
     # Assign fresh UUID codes to every dataset and keep mapping from old -> new.
     old_to_new = {}
@@ -71,9 +69,7 @@ def write_database(regio, target_db_name=None):
         new_code = uuid.uuid4().hex
         old_to_new[old_key] = (regio.target_db_name, new_code)
         if old_key[1] is not None:
-            code_to_new_candidates[old_key[1]].add(
-                (regio.target_db_name, new_code)
-            )
+            code_to_new_candidates[old_key[1]].add((regio.target_db_name, new_code))
         ds["database"] = regio.target_db_name
         ds["code"] = new_code
 
@@ -139,38 +135,38 @@ def write_database(regio, target_db_name=None):
 
     for ds in normalized_data.values():
         for exc in ds["exchanges"]:
-                if exc.get("type") != "biosphere":
-                    continue
-                code = exc.get("code")
-                if code in spatialized_codes:
-                    exc["database"] = regio.name_spatialized_biosphere
-                    exc["input"] = (regio.name_spatialized_biosphere, code)
-                    continue
-                if code in base_codes:
-                    exc["database"] = base_biosphere_name
-                    exc["input"] = (base_biosphere_name, code)
-                    continue
+            if exc.get("type") != "biosphere":
+                continue
+            code = exc.get("code")
+            if code in spatialized_codes:
+                exc["database"] = regio.name_spatialized_biosphere
+                exc["input"] = (regio.name_spatialized_biosphere, code)
+                continue
+            if code in base_codes:
+                exc["database"] = base_biosphere_name
+                exc["input"] = (base_biosphere_name, code)
+                continue
 
-                key = (exc.get("name"), exc.get("categories"))
-                if key in spatialized_by_name_cat:
-                    code = spatialized_by_name_cat[key]
-                    exc["database"] = regio.name_spatialized_biosphere
-                elif key in base_by_name_cat:
-                    code = base_by_name_cat[key]
-                    exc["database"] = base_biosphere_name
-                elif exc.get("name") in spatialized_by_name:
-                    code = spatialized_by_name[exc.get("name")]
-                    exc["database"] = regio.name_spatialized_biosphere
-                elif exc.get("name") in base_by_name:
-                    code = base_by_name[exc.get("name")]
-                    exc["database"] = base_biosphere_name
-                else:
-                    raise KeyError(
-                        "Could not resolve biosphere flow code for exchange "
-                        f"name={exc.get('name')!r}, categories={exc.get('categories')!r}"
-                    )
-                exc["code"] = code
-                exc["input"] = (exc["database"], exc["code"])
+            key = (exc.get("name"), exc.get("categories"))
+            if key in spatialized_by_name_cat:
+                code = spatialized_by_name_cat[key]
+                exc["database"] = regio.name_spatialized_biosphere
+            elif key in base_by_name_cat:
+                code = base_by_name_cat[key]
+                exc["database"] = base_biosphere_name
+            elif exc.get("name") in spatialized_by_name:
+                code = spatialized_by_name[exc.get("name")]
+                exc["database"] = regio.name_spatialized_biosphere
+            elif exc.get("name") in base_by_name:
+                code = base_by_name[exc.get("name")]
+                exc["database"] = base_biosphere_name
+            else:
+                raise KeyError(
+                    "Could not resolve biosphere flow code for exchange "
+                    f"name={exc.get('name')!r}, categories={exc.get('categories')!r}"
+                )
+            exc["code"] = code
+            exc["input"] = (exc["database"], exc["code"])
 
     if regio.target_db_name in bd.databases:
         del bd.databases[regio.target_db_name]
@@ -210,10 +206,7 @@ def connect_ecoinvent_to_regioinvent(regio):
         if process["location"] in regio.country_to_ecoinvent_regions.keys():
             location = process["location"]
         # for sub-countries (e.g., CA-QC)
-        elif (
-            process["location"].split("-")[0]
-            in regio.country_to_ecoinvent_regions.keys()
-        ):
+        elif process["location"].split("-")[0] in regio.country_to_ecoinvent_regions.keys():
             location = process["location"].split("-")[0]
         # check if location is not None and not Switzerland
         if location and location != "CH":
