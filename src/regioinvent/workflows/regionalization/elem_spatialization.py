@@ -1,13 +1,7 @@
-import collections
-import copy
 import json
-import uuid
 from importlib.resources import as_file, files
 
 import bw2data as bd
-import pandas as pd
-import wurst.searching as ws
-from tqdm import tqdm
 
 def spatialize_elem_flows(regio):
     """

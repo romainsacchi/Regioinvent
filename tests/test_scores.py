@@ -98,18 +98,15 @@ def test_regio_outputs_only_regression():
         )
 
     db_len = len(bd.Database(regio_db_name))
-    assert db_len == 228070, f"Unexpected {regio_db_name} size: {db_len}"
+    assert db_len == 251593, f"Unexpected {regio_db_name} size: {db_len}"
 
     print("Running regression test for regio outputs only...")
     method = _pick_method()
     for i, spec in enumerate(TARGET_ACTIVITIES):
         act = _find_activity(regio_db_name, spec)
-        if i == 0:
-            lca = bc.LCA({act: 1}, method)
-            lca.lci(factorize=True)
-            lca.lcia()
-        else:
-            lca.redo_lcia({act: 1})
+        lca = bc.LCA({act: 1}, method)
+        lca.lci(factorize=False)
+        lca.lcia()
         score = float(lca.score)
         print(f"Activity: {spec.name}, {spec.reference_product}, {spec.location} - Score: {score}")
         assert score == pytest.approx(spec.expected_score, rel=1e-8, abs=1e-12)

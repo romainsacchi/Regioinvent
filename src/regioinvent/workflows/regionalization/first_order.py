@@ -1,11 +1,9 @@
-import collections
 import copy
 import json
 import uuid
 from collections import defaultdict
 from importlib.resources import as_file, files
 
-import pandas as pd
 import wurst.searching as ws
 from tqdm import tqdm
 
