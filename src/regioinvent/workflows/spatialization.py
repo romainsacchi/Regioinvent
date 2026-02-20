@@ -13,7 +13,7 @@ def spatialize_my_ecoinvent(regio):
     flows used by ecoinvent. It also creates additional technosphere water processes to remediate imbalances due to
     technosphere misrepresentations.
 
-    :return: nothing but creates multiple databases in your brightway2 project
+    :return: nothing but prepares an in-memory spatialized copy of ecoinvent
     """
 
     # ---------------------------- Create the spatialized biosphere ----------------------------
@@ -34,109 +34,104 @@ def spatialize_my_ecoinvent(regio):
     else:
         regio.logger.info("biosphere3_spatialized_flows already exists in this project.")
 
-    # ---------------------------- Spatialize ecoinvent ----------------------------
+    # ---------------------------- Spatialize ecoinvent (in memory) ----------------------------
+    if getattr(regio, "_spatialized_in_memory_ready", False):
+        regio.logger.info("In-memory spatialized ecoinvent already prepared.")
+        return
 
-    if regio.name_ei_with_regionalized_biosphere not in bw2.databases:
-        # transform format of ecoinvent to wurst format for speed-up
-        regio.logger.info("Extracting ecoinvent to wurst...")
-        regio.ei_wurst = extract_brightway2_databases_compat(
-            regio.ecoinvent_database_name, add_identifiers=True
+    # transform format of ecoinvent to wurst format for speed-up
+    regio.logger.info("Extracting ecoinvent to wurst...")
+    regio.ei_wurst = extract_brightway2_databases_compat(
+        regio.ecoinvent_database_name, add_identifiers=True
+    )
+
+    # also get ecoinvent in a format for more efficient searching
+    regio.ei_in_dict = {
+        (i["reference product"], i["location"], i["name"]): i for i in regio.ei_wurst
+    }
+
+    # load the list of the base name of all spatialized elementary flows
+    with as_file(
+        files("regioinvent").joinpath(
+            f"data/Spatialization_of_elementary_flows/ei{regio.ecoinvent_version}/spatialized_elementary_flows.json"
         )
+    ) as file_path:
+        with open(file_path, "r") as f:
+            base_spatialized_flows = json.load(f)
 
-        # also get ecoinvent in a format for more efficient searching
-        regio.ei_in_dict = {
-            (i["reference product"], i["location"], i["name"]): i
-            for i in regio.ei_wurst
-        }
+    # store the codes of the spatialized flows in a dictionary
+    spatialized_flows = {
+        (i.as_dict()["name"], i.as_dict()["categories"]): i.as_dict()["code"]
+        for i in bw2.Database(regio.name_spatialized_biosphere)
+    }
 
-        # load the list of the base name of all spatialized elementary flows
-        with as_file(
-            files("regioinvent").joinpath(
-                f"data/Spatialization_of_elementary_flows/ei{regio.ecoinvent_version}/spatialized_elementary_flows.json"
-            )
-        ) as file_path:
-            with open(file_path, "r") as f:
-                base_spatialized_flows = json.load(f)
-
-        # store the codes of the spatialized flows in a dictionary
-        spatialized_flows = {
-            (i.as_dict()["name"], i.as_dict()["categories"]): i.as_dict()["code"]
-            for i in bw2.Database(regio.name_spatialized_biosphere)
-        }
-
-        regio.logger.info("Spatializing ecoinvent...")
-        # loop through the whole ecoinvent database
-        for process in regio.ei_wurst:
-            # if you have more than 1000 exchanges -> aggregated process (S) -> should not be spatialized
-            if len(process["exchanges"]) < 1000:
-                # create a copy, but in the new ecoinvent database
-                process["database"] = regio.name_ei_with_regionalized_biosphere
-                # loop through exchanges of a process
-                for exc in process["exchanges"]:
-                    # if it's a biosphere exchange
-                    if exc["type"] == "biosphere":
-                        # check if it's a flow that should be spatialized
-                        if exc["name"] in base_spatialized_flows:
-                            # check if the category makes sense (don't regionalize mineral resources for instance)
-                            if exc["categories"][0] in base_spatialized_flows[exc["name"]]:
-                                # to spatialize it, we need to get the uuid of the existing spatialized flow
-                                exc["code"] = spatialized_flows[
-                                    (
-                                        exc["name"] + ", " + process["location"],
-                                        exc["categories"],
-                                    )
-                                ]
-                                # change the database of the exchange as well
-                                exc["database"] = regio.name_spatialized_biosphere
-                                # update its name
-                                exc["name"] = exc["name"] + ", " + process["location"]
-                                # and finally its input key
-                                exc["input"] = (exc["database"], exc["code"])
-                    # if it's a technosphere exchange, just update the database value
-                    else:
-                        exc["database"] = regio.name_ei_with_regionalized_biosphere
-            # if you are an aggregated process (S)
-            elif len(process["exchanges"]) > 1000:
-                # simply change the name of the database
-                process["database"] = regio.name_ei_with_regionalized_biosphere
-                for exc in process["exchanges"]:
+    regio.logger.info("Spatializing ecoinvent...")
+    # loop through the whole ecoinvent database
+    for process in regio.ei_wurst:
+        # if you have more than 1000 exchanges -> aggregated process (S) -> should not be spatialized
+        if len(process["exchanges"]) < 1000:
+            # create a copy, but in the new ecoinvent database
+            process["database"] = regio.name_ei_with_regionalized_biosphere
+            # loop through exchanges of a process
+            for exc in process["exchanges"]:
+                # if it's a biosphere exchange
+                if exc["type"] == "biosphere":
+                    # check if it's a flow that should be spatialized
+                    if exc["name"] in base_spatialized_flows:
+                        # check if the category makes sense (don't regionalize mineral resources for instance)
+                        if exc["categories"][0] in base_spatialized_flows[exc["name"]]:
+                            # to spatialize it, we need to get the uuid of the existing spatialized flow
+                            exc["code"] = spatialized_flows[
+                                (
+                                    exc["name"] + ", " + process["location"],
+                                    exc["categories"],
+                                )
+                            ]
+                            # change the database of the exchange as well
+                            exc["database"] = regio.name_spatialized_biosphere
+                            # update its name
+                            exc["name"] = exc["name"] + ", " + process["location"]
+                            # and finally its input key
+                            exc["input"] = (exc["database"], exc["code"])
+                # if it's a technosphere exchange, just update the database value
+                else:
                     exc["database"] = regio.name_ei_with_regionalized_biosphere
+        # if you are an aggregated process (S)
+        elif len(process["exchanges"]) > 1000:
+            # simply change the name of the database
+            process["database"] = regio.name_ei_with_regionalized_biosphere
+            for exc in process["exchanges"]:
+                exc["database"] = regio.name_ei_with_regionalized_biosphere
 
-        # sometimes input keys disappear with wurst, make sure there is always one
-        for pr in regio.ei_wurst:
-            for exc in pr["exchanges"]:
-                try:
-                    exc["input"]
-                except KeyError:
-                    exc["input"] = (exc["database"], exc["code"])
-
-        # modify structure of data from wurst to bw2
-        regio.ei_regio_data = {(i["database"], i["code"]): i for i in regio.ei_wurst}
-
-        # same as before, ensure input key is here
-        for pr in regio.ei_regio_data:
-            for exc in regio.ei_regio_data[pr]["exchanges"]:
-                try:
-                    exc["input"]
-                except KeyError:
-                    exc["input"] = (exc["database"], exc["code"])
-        # wurst creates empty categories for technosphere activities, delete those
-        for pr in regio.ei_regio_data:
+    # sometimes input keys disappear with wurst, make sure there is always one
+    for pr in regio.ei_wurst:
+        for exc in pr["exchanges"]:
             try:
-                del regio.ei_regio_data[pr]["categories"]
+                exc["input"]
             except KeyError:
-                pass
-        # same with parameters
-        for pr in regio.ei_regio_data:
-            try:
-                del regio.ei_regio_data[pr]["parameters"]
-            except KeyError:
-                pass
+                exc["input"] = (exc["database"], exc["code"])
 
-        # write the ecoinvent-regionalized database to brightway
-        bw2.Database(regio.name_ei_with_regionalized_biosphere).write(regio.ei_regio_data)
-    else:
-        regio.logger.info(
-            "There is already a spatialized version of ecoinvent in your project. If you want to redo "
-            "spatialization, please delete it and re-run."
-        )
+    # modify structure of data from wurst to bw2 (in-memory only)
+    regio.ei_regio_data = {(i["database"], i["code"]): i for i in regio.ei_wurst}
+
+    # same as before, ensure input key is here
+    for pr in regio.ei_regio_data:
+        for exc in regio.ei_regio_data[pr]["exchanges"]:
+            try:
+                exc["input"]
+            except KeyError:
+                exc["input"] = (exc["database"], exc["code"])
+    # wurst creates empty categories for technosphere activities, delete those
+    for pr in regio.ei_regio_data:
+        try:
+            del regio.ei_regio_data[pr]["categories"]
+        except KeyError:
+            pass
+    # same with parameters
+    for pr in regio.ei_regio_data:
+        try:
+            del regio.ei_regio_data[pr]["parameters"]
+        except KeyError:
+            pass
+
+    regio._spatialized_in_memory_ready = True
