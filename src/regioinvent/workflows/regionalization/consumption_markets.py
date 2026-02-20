@@ -1,6 +1,5 @@
 import collections
 import uuid
-from time import perf_counter
 
 import pandas as pd
 from tqdm import tqdm
@@ -14,8 +13,6 @@ def create_consumption_markets(regio):
     regio.logger.info(
         "Creating consumption markets for internationally-traded products..."
     )
-    t0 = perf_counter()
-    checkpoint_every = 100
 
     # change to dictionary to speed searching for info
     regio.regioinvent_in_dict = {
@@ -42,8 +39,7 @@ def create_consumption_markets(regio):
         regio.domestic_production.groupby("cmdCode")["source"].first().to_dict()
     )
 
-    for idx, product in enumerate(tqdm(regio.eco_to_hs_class, leave=True), start=1):
-        product_t0 = perf_counter()
+    for product in tqdm(regio.eco_to_hs_class, leave=True):
         cmd_code = regio.eco_to_hs_class[product]
         # filter the product in regio.consumption_data
         try:
@@ -201,22 +197,3 @@ def create_consumption_markets(regio):
                 new_import_data["exchanges"].append(exc)
             # add to database in wurst
             regio.regioinvent_in_wurst.append(new_import_data)
-
-        if idx % checkpoint_every == 0:
-            elapsed = perf_counter() - t0
-            regio.logger.info(
-                f"Timing - create_consumption_markets: {idx}/{len(regio.eco_to_hs_class)} products, "
-                f"elapsed={elapsed:.2f}s, avg={elapsed/idx:.2f}s/product"
-            )
-
-        product_elapsed = perf_counter() - product_t0
-        if product_elapsed > 5:
-            regio.logger.info(
-                f"Timing - create_consumption_markets slow product {product}: {product_elapsed:.2f}s"
-            )
-
-    total = perf_counter() - t0
-    regio.logger.info(
-        f"Timing - create_consumption_markets total: {total:.2f}s "
-        f"({total/len(regio.eco_to_hs_class):.2f}s/product)"
-    )
