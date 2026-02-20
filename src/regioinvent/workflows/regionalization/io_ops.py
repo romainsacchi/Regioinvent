@@ -208,6 +208,17 @@ def connect_ecoinvent_to_regioinvent(regio):
 
     # aggregating duplicate inputs (e.g., multiple consumption markets RoW callouts)
     for process in regio.ei_wurst:
+        # Some technosphere exchanges can still miss an input tuple at this stage.
+        # Reconstruct from available database/code metadata before deduplication.
+        for exc in process["exchanges"]:
+            if (
+                exc.get("type") == "technosphere"
+                and "input" not in exc
+                and "database" in exc
+                and "code" in exc
+            ):
+                exc["input"] = (exc["database"], exc["code"])
+
         duplicates = [
             item
             for item, count in collections.Counter(
