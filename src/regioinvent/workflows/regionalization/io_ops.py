@@ -116,6 +116,62 @@ def write_database(regio, target_db_name=None):
         ds.pop("parameters", None)
         normalized_data[(regio.target_db_name, ds["code"])] = ds
 
+    # Ensure biosphere exchanges point to valid flow codes in either biosphere database.
+    spatialized_records = [flow.as_dict() for flow in bw2.Database(regio.name_spatialized_biosphere)]
+    base_biosphere_name = "biosphere3"
+    base_records = [flow.as_dict() for flow in bw2.Database(base_biosphere_name)]
+
+    spatialized_codes = {flow["code"] for flow in spatialized_records}
+    base_codes = {flow["code"] for flow in base_records}
+
+    spatialized_by_name_cat = {
+        (flow.get("name"), flow.get("categories")): flow["code"] for flow in spatialized_records
+    }
+    base_by_name_cat = {
+        (flow.get("name"), flow.get("categories")): flow["code"] for flow in base_records
+    }
+    spatialized_by_name = {}
+    for flow in spatialized_records:
+        spatialized_by_name.setdefault(flow.get("name"), flow["code"])
+    base_by_name = {}
+    for flow in base_records:
+        base_by_name.setdefault(flow.get("name"), flow["code"])
+
+    for ds in normalized_data.values():
+        for exc in ds["exchanges"]:
+                if exc.get("type") != "biosphere":
+                    continue
+                code = exc.get("code")
+                if code in spatialized_codes:
+                    exc["database"] = regio.name_spatialized_biosphere
+                    exc["input"] = (regio.name_spatialized_biosphere, code)
+                    continue
+                if code in base_codes:
+                    exc["database"] = base_biosphere_name
+                    exc["input"] = (base_biosphere_name, code)
+                    continue
+
+                key = (exc.get("name"), exc.get("categories"))
+                if key in spatialized_by_name_cat:
+                    code = spatialized_by_name_cat[key]
+                    exc["database"] = regio.name_spatialized_biosphere
+                elif key in base_by_name_cat:
+                    code = base_by_name_cat[key]
+                    exc["database"] = base_biosphere_name
+                elif exc.get("name") in spatialized_by_name:
+                    code = spatialized_by_name[exc.get("name")]
+                    exc["database"] = regio.name_spatialized_biosphere
+                elif exc.get("name") in base_by_name:
+                    code = base_by_name[exc.get("name")]
+                    exc["database"] = base_biosphere_name
+                else:
+                    raise KeyError(
+                        "Could not resolve biosphere flow code for exchange "
+                        f"name={exc.get('name')!r}, categories={exc.get('categories')!r}"
+                    )
+                exc["code"] = code
+                exc["input"] = (exc["database"], exc["code"])
+
     if regio.target_db_name in bw2.databases:
         del bw2.databases[regio.target_db_name]
 
